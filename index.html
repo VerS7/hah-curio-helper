@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Curiosity Planner &mdash; Haven and Hearth</title>
+<link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand-block">
+      <div class="game-brand">Haven and Hearth</div>
+      <h1 class="app-title">Curiosity <span class="accent-word">Planner</span></h1>
+    </div>
+    <div class="header-status">
+      <span class="status-desc" id="headerStatusDesc">Study Desk Queue &amp; Study Report</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT: settings -->
+  <div class="panel">
+    <h2>Settings</h2>
+
+    <div class="mode-switch">
+      <button type="button" class="mode-btn active" id="modeDesk" data-mode="desk">Study Desk</button>
+      <button type="button" class="mode-btn" id="modeUpkeep" data-mode="upkeep">Upkeep</button>
+    </div>
+
+    <div class="control" id="controlTableSize">
+      <label>Study Desk size (cells) <span class="val" id="tableSizeVal">12 &times; 12</span></label>
+      <input type="range" id="tableSize" min="5" max="12" step="1" value="12">
+    </div>
+
+    <div class="control" id="controlBufferWeight">
+      <label>Attention <span class="val" id="bufferWeightVal">150</span></label>
+      <input type="range" id="bufferWeight" min="10" max="1500" step="10" value="150">
+      <div class="hint">The Study Report is fixed at 4 &times; 4 cells, as in the game, so
+        Attention is the only study limit you control.</div>
+    </div>
+
+    <div class="control">
+      <label>Planning horizon (days) <span class="val" id="horizonDaysVal">3</span></label>
+      <input type="range" id="horizonDays" min="0.5" max="30" step="0.5" value="3">
+    </div>
+
+    <div class="control" id="controlFitToHorizon">
+      <label class="check"><input type="checkbox" id="fitToHorizon" checked> Fit to horizon</label>
+      <div class="hint">Size the queue so it drains completely within the horizon
+        instead of blindly filling every cell.</div>
+    </div>
+
+    <div class="control">
+      <label>LP multiplier <span class="val" id="lpMultVal">1.0</span></label>
+      <input type="range" id="lpMult" min="0.1" max="10" step="0.1" value="1">
+    </div>
+    <div class="control">
+      <label>Study speed multiplier <span class="val" id="speedMultVal">1.0</span></label>
+      <input type="range" id="speedMult" min="0.1" max="10" step="0.1" value="1">
+    </div>
+    <div class="control">
+      <label>Cell size (px) <span class="val" id="cellSizeVal">30</span></label>
+      <input type="range" id="cellSize" min="20" max="48" step="1" value="30">
+    </div>
+
+    <h2>Priorities</h2>
+    <div class="hint" style="margin-bottom:8px;">
+      Priority 1 is applied first, priority 2 breaks ties.
+    </div>
+
+    <div class="priority-row">
+      <select id="p1metric">
+        <option value="xp_cost">XP cost</option>
+        <option value="points">Learning points (LP)</option>
+        <option value="weight">Weight</option>
+        <option value="study_seconds">Study time</option>
+        <option value="points_per_cost">LP per XP</option>
+        <option value="points_per_cell">LP per cell</option>
+        <option value="lp_per_hour">LP per hour</option>
+        <option value="lp_per_cell_hour">LP per cell-hour</option>
+        <option value="lp_per_weight_hour" selected>LP per weight-hour</option>
+        <option value="xp_per_hour">XP per hour</option>
+      </select>
+      <select id="p1dir">
+        <option value="min">min</option>
+        <option value="max" selected>max</option>
+      </select>
+    </div>
+
+    <div class="priority-row">
+      <select id="p2metric">
+        <option value="xp_cost">XP cost</option>
+        <option value="points" selected>Learning points (LP)</option>
+        <option value="weight">Weight</option>
+        <option value="study_seconds">Study time</option>
+        <option value="points_per_cost">LP per XP</option>
+        <option value="points_per_cell">LP per cell</option>
+        <option value="lp_per_hour">LP per hour</option>
+        <option value="lp_per_cell_hour">LP per cell-hour</option>
+        <option value="lp_per_weight_hour">LP per weight-hour</option>
+        <option value="xp_per_hour">XP per hour</option>
+      </select>
+      <select id="p2dir">
+        <option value="min">min</option>
+        <option value="max" selected>max</option>
+      </select>
+    </div>
+
+    <div class="btn-row" style="margin-top:10px;">
+      <button id="btnReset">Reset to defaults</button>
+    </div>
+  </div>
+
+  <!-- CENTER: grids -->
+  <div class="panel">
+    <h2 id="centerPanelTitle">Study Desk &amp; Study Report</h2>
+
+    <div class="grid-wrap">
+      <div class="grid-title">
+        <h3 id="queueSectionTitle">Study Desk (queue)</h3>
+        <span class="meta" id="tableMeta"></span>
+      </div>
+      <div class="queue-box" id="tableQueue"></div>
+    </div>
+
+    <div class="grid-wrap">
+      <div class="grid-title">
+        <h3 id="bufferSectionTitle">Study Report (studying, unique types)</h3>
+        <span class="meta" id="bufferMeta"></span>
+      </div>
+      <div class="grid-box" id="bufferGrid"></div>
+    </div>
+
+    <div class="hint">
+      Hover a tile to see the curio stats.
+    </div>
+
+    <h2>Statistics</h2>
+    <div id="statsBox"></div>
+  </div>
+
+  <!-- RIGHT: curio selection -->
+  <div class="panel panel-curios">
+    <div class="panel-header-row">
+      <h2>Curiosities</h2>
+      <div class="curio-tabs">
+        <button type="button" class="tab-btn active" id="tabAll" data-tab="all">All <span class="tab-count" id="tabAllCount">(840)</span></button>
+        <button type="button" class="tab-btn" id="tabSelected" data-tab="selected">Selected <span class="tab-count" id="tabSelectedCount">(840)</span></button>
+      </div>
+    </div>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Search by name...">
+    </div>
+    <div class="btn-row">
+      <button id="btnSelectVisible">Select visible</button>
+      <button id="btnDeselectVisible">Deselect visible</button>
+    </div>
+    <div class="btn-row">
+      <button class="primary" id="btnSelectAll">Select all</button>
+      <button id="btnDeselectAll">Clear all</button>
+    </div>
+    <div class="list-meta" id="listMeta"></div>
+    <div class="curio-list" id="curioList"></div>
+  </div>
+
+</div>
+
+<footer>
+  Curio data from ringofbrodgar.com. Not affiliated with Haven &amp; Hearth or Ring of Brodgar.
+</footer>
+
+<script src="data.js?v=4"></script>
+<script src="planner.js?v=4"></script>
+<script src="app.js?v=4"></script>
+</body>
+</html>
