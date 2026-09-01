@@ -29,7 +29,7 @@ Rules:
    cells and its Attention.
 4. **Refill:** the freed room is filled with the **same type** from the
    Study Desk first; otherwise the best remaining item by priority.
-5. Duplicates are allowed on the Study Desk, but the Study Report permits only **unique types** simultaneously.
+5. Duplicates are allowed on the Study Desk, but the Study Report permits only **unique types** simultaneously (all sizes and cuts of the same gem family count as the same type).
 6. The goal is **maximum LP**. Attention is a ceiling, not a target.
 7. An item whose study time exceeds the remaining horizon is never placed.
 

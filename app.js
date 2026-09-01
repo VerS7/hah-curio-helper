@@ -65,17 +65,8 @@ function fmtDuration(seconds) {
 // Gem grouping: 540 of 840 curios are "<Size> <Cut> <Family>".
 // The family is the WHOLE remainder, so "Sugar Diamond" and "Diamond"
 // stay separate families.
+// (GEM_SIZES, GEM_CUTS, parseGem are defined in planner.js)
 // ---------------------------------------------------------------- //
-
-const GEM_SIZES = ["Tiny", "Small", "Fair", "Large", "Grand", "Jotun"];
-const GEM_CUTS = ["Rough", "Smooth", "Cabochon", "Pear", "Heart", "Brilliant"];
-
-function parseGem(name) {
-  const p = name.split(" ");
-  if (p.length < 3) return null;
-  if (!GEM_SIZES.includes(p[0]) || !GEM_CUTS.includes(p[1])) return null;
-  return { size: p[0], cut: p[1], family: p.slice(2).join(" ") };
-}
 
 const GEM_FAMILIES = new Map(); // family -> [{curio,size,cut}]
 const PLAIN_CURIOS = [];
@@ -486,7 +477,8 @@ function curioSubline(c) {
 }
 
 function makeCurioRow(c) {
-  const row = document.createElement("label");
+  const isSelectedTab = currentCurioTab === "selected";
+  const row = document.createElement(isSelectedTab ? "div" : "label");
   row.className = "curio-row" + (isOverHorizon(c) ? " over-horizon" : "");
 
   const cb = document.createElement("input");
@@ -1192,6 +1184,317 @@ function renderStats(report, config) {
 
   el.innerHTML = html;
 }
+
+// ---------------------------------------------------------------- //
+// Import & Export Configuration
+// ---------------------------------------------------------------- //
+
+function getExportPayload() {
+  const currentCfg = readConfigFromControls();
+  let sel;
+  if (selected.size === CATALOG.length) {
+    sel = "ALL";
+  } else {
+    sel = [...selected];
+  }
+
+  return {
+    version: STORAGE_VERSION,
+    app: "hah-curio-planner",
+    exportedAt: new Date().toISOString(),
+    config: currentCfg,
+    selected: sel,
+    quality: Object.fromEntries(quality),
+    minQty: Object.fromEntries(minQuantities),
+    maxQty: Object.fromEntries(maxQuantities),
+  };
+}
+
+function getExportJsonString(pretty = true) {
+  return JSON.stringify(getExportPayload(), null, pretty ? 2 : undefined);
+}
+
+let statusTimeout = null;
+function setImportExportStatus(msg, type = "info") {
+  const el = document.getElementById("importExportStatus");
+  if (!el) return;
+  if (statusTimeout) clearTimeout(statusTimeout);
+  el.textContent = msg;
+  el.className = `import-export-status is-visible ${type}`;
+  statusTimeout = setTimeout(() => {
+    el.classList.remove("is-visible");
+  }, 6000);
+}
+
+function applyImportedConfig(raw) {
+  let data = raw;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch (err) {
+      return { success: false, error: "Invalid JSON syntax: " + err.message };
+    }
+  }
+
+  if (!data || typeof data !== "object") {
+    return { success: false, error: "Invalid configuration format (expected JSON object)." };
+  }
+
+  // 1. Config
+  const cfg = Object.assign({}, DEFAULT_CONFIG);
+  if (data.config && typeof data.config === "object") {
+    for (const k of Object.keys(DEFAULT_CONFIG)) {
+      const v = data.config[k];
+      if (v === undefined || v === null) continue;
+      if (typeof DEFAULT_CONFIG[k] === "boolean") cfg[k] = !!v;
+      else if (typeof DEFAULT_CONFIG[k] === "number" && Number.isFinite(Number(v))) cfg[k] = Number(v);
+      else if (typeof DEFAULT_CONFIG[k] === "string" && typeof v === "string") cfg[k] = v;
+    }
+  }
+  if (typeof cfg.tableSize === "number") {
+    cfg.tableSize = Math.min(12, Math.max(5, Math.round(cfg.tableSize)));
+  }
+  if (typeof cfg.bufferWeight === "number") {
+    cfg.bufferWeight = Math.min(1500, Math.max(10, Math.round(cfg.bufferWeight)));
+  }
+  if (typeof cfg.horizonDays === "number") {
+    cfg.horizonDays = Math.min(30, Math.max(0.5, cfg.horizonDays));
+  }
+  if (typeof cfg.cellSize === "number") {
+    cfg.cellSize = Math.min(48, Math.max(20, Math.round(cfg.cellSize)));
+  }
+  if (typeof cfg.lpMult === "number") {
+    cfg.lpMult = Math.max(0.1, cfg.lpMult);
+  }
+  if (typeof cfg.speedMult === "number") {
+    cfg.speedMult = Math.max(0.1, cfg.speedMult);
+  }
+  if (cfg.mode !== "upkeep") cfg.mode = "desk";
+
+  applyConfigToControls(cfg);
+
+  // 2. Selection
+  let restoredCount = 0;
+  if (data.selected === "ALL") {
+    selected.clear();
+    CATALOG.forEach(c => selected.add(c.name));
+    restoredCount = CATALOG.length;
+  } else if (Array.isArray(data.selected)) {
+    selected.clear();
+    for (const n of data.selected) {
+      if (CATALOG_BY_NAME.has(n)) {
+        selected.add(n);
+        restoredCount++;
+      }
+    }
+  } else if (data.selected && Array.isArray(data.selected.invert)) {
+    selected.clear();
+    CATALOG.forEach(c => selected.add(c.name));
+    data.selected.invert.forEach(n => selected.delete(n));
+    restoredCount = selected.size;
+  }
+
+  // 3. Quality
+  quality.clear();
+  let qualityCount = 0;
+  if (data.quality && typeof data.quality === "object") {
+    for (const [name, v] of Object.entries(data.quality)) {
+      if (!CATALOG_BY_NAME.has(name)) continue;
+      const q = Number(v);
+      if (Number.isFinite(q) && q > 0 && q !== DEFAULT_QUALITY) {
+        quality.set(name, q);
+        qualityCount++;
+      }
+    }
+  }
+
+  // 4. Min Qty
+  minQuantities.clear();
+  let minCount = 0;
+  if (data.minQty && typeof data.minQty === "object") {
+    for (const [name, v] of Object.entries(data.minQty)) {
+      if (!CATALOG_BY_NAME.has(name)) continue;
+      const val = parseInt(v, 10);
+      if (Number.isFinite(val) && val > 0) {
+        minQuantities.set(name, val);
+        minCount++;
+      }
+    }
+  }
+
+  // 5. Max Qty
+  maxQuantities.clear();
+  let maxCount = 0;
+  if (data.maxQty && typeof data.maxQty === "object") {
+    for (const [name, v] of Object.entries(data.maxQty)) {
+      if (!CATALOG_BY_NAME.has(name)) continue;
+      const val = parseInt(v, 10);
+      if (Number.isFinite(val) && val >= 0) {
+        maxQuantities.set(name, val);
+        maxCount++;
+      }
+    }
+  }
+
+  // 6. UI state if present
+  if (data.ui && typeof data.ui === "object") {
+    if (Array.isArray(data.ui.collapsedGroups)) {
+      collapsedGroups.clear();
+      data.ui.collapsedGroups.forEach(g => { if (GEM_FAMILIES.has(g)) collapsedGroups.add(g); });
+    }
+    if (typeof data.ui.searchTerm === "string") {
+      searchTerm = data.ui.searchTerm;
+      searchInput.value = searchTerm;
+    }
+    if (data.ui.curioTab === "selected" || data.ui.curioTab === "all") {
+      currentCurioTab = data.ui.curioTab;
+    }
+  }
+
+  syncCurioTabsUI();
+  syncSliderLabels();
+  horizonSecondsForList = parseFloat(controls.horizonDays.value) * 86400;
+  speedForList = parseFloat(controls.speedMult.value);
+  renderCurioList();
+  scheduleSave();
+  scheduleRecompute();
+
+  return {
+    success: true,
+    selectedCount: selected.size,
+    qualityCount,
+    minCount,
+    maxCount,
+  };
+}
+
+function downloadConfigFile() {
+  const json = getExportJsonString(true);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+  const dateStr = new Date().toISOString().split("T")[0];
+  const filename = `curio-planner-config-${dateStr}.json`;
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+
+  setImportExportStatus(`Exported to "${filename}" successfully.`, "success");
+}
+
+async function copyConfigToClipboard(btn) {
+  const json = getExportJsonString(true);
+  let success = false;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(json);
+      success = true;
+    } catch (e) {
+      success = false;
+    }
+  }
+
+  if (!success) {
+    // Fallback using temporary textarea
+    const temp = document.createElement("textarea");
+    temp.value = json;
+    temp.style.position = "fixed";
+    temp.style.opacity = "0";
+    document.body.appendChild(temp);
+    temp.select();
+    try {
+      success = document.execCommand("copy");
+    } catch (e) {
+      success = false;
+    }
+    document.body.removeChild(temp);
+  }
+
+  if (btn) {
+    const origText = btn.textContent;
+    btn.textContent = success ? "Copied!" : "Error";
+    setTimeout(() => { btn.textContent = origText; }, 2000);
+  }
+
+  if (success) {
+    setImportExportStatus("Configuration JSON copied to clipboard.", "success");
+  } else {
+    setImportExportStatus("Failed to copy to clipboard (permission denied).", "error");
+  }
+}
+
+function triggerImportFile() {
+  const fileInput = document.getElementById("importFileInput");
+  if (!fileInput) return;
+  fileInput.value = "";
+  fileInput.click();
+}
+
+function handleFileInputChange(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const text = ev.target.result;
+    const res = applyImportedConfig(text);
+    if (res.success) {
+      setImportExportStatus(
+        `Imported "${file.name}": ${res.selectedCount} curios selected.`,
+        "success"
+      );
+    } else {
+      setImportExportStatus(`Import failed: ${res.error}`, "error");
+    }
+  };
+  reader.onerror = () => {
+    setImportExportStatus("Failed to read the file.", "error");
+  };
+  reader.readAsText(file);
+}
+
+async function importFromClipboard() {
+  let text = "";
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    try {
+      text = await navigator.clipboard.readText();
+    } catch (e) {
+      text = "";
+    }
+  }
+
+  if (!text) {
+    setImportExportStatus("Clipboard is empty or browser access was denied.", "info");
+    return;
+  }
+
+  const res = applyImportedConfig(text);
+  if (res.success) {
+    setImportExportStatus(
+      `Configuration applied: ${res.selectedCount} curios selected.`,
+      "success"
+    );
+  } else {
+    setImportExportStatus(`Import failed: ${res.error}`, "error");
+  }
+}
+
+// Wire Import & Export UI
+const btnExportFile = document.getElementById("btnExportFile");
+const btnExportClipboard = document.getElementById("btnExportClipboard");
+const btnImportFile = document.getElementById("btnImportFile");
+const btnImportClipboard = document.getElementById("btnImportClipboard");
+const importFileInput = document.getElementById("importFileInput");
+
+if (btnExportFile) btnExportFile.addEventListener("click", downloadConfigFile);
+if (btnExportClipboard) btnExportClipboard.addEventListener("click", () => copyConfigToClipboard(btnExportClipboard));
+if (btnImportFile) btnImportFile.addEventListener("click", triggerImportFile);
+if (importFileInput) importFileInput.addEventListener("change", handleFileInputChange);
+if (btnImportClipboard) btnImportClipboard.addEventListener("click", importFromClipboard);
 
 // ---------------------------------------------------------------- //
 // Init

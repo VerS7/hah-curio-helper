@@ -72,6 +72,35 @@ function sortByComparator(list, keyFn) {
 }
 
 // ---------------------------------------------------------------- //
+// Gemstone taxonomy
+// 540 of 840 curios are "<Size> <Cut> <Family>".
+// All sizes and cuts of the same gem family share the same study slot
+// (e.g. Tiny Rough Jade and Grand Brilliant Jade cannot be studied
+// simultaneously in the Study Report).
+// ---------------------------------------------------------------- //
+
+const GEM_SIZES = ["Tiny", "Small", "Fair", "Large", "Grand", "Jotun"];
+const GEM_CUTS = ["Rough", "Smooth", "Cabochon", "Pear", "Heart", "Brilliant"];
+
+function parseGem(name) {
+  if (typeof name !== "string") return null;
+  const p = name.split(" ");
+  if (p.length < 3) return null;
+  if (!GEM_SIZES.includes(p[0]) || !GEM_CUTS.includes(p[1])) return null;
+  return { size: p[0], cut: p[1], family: p.slice(2).join(" ") };
+}
+
+function getStudyGroup(curioOrName) {
+  if (!curioOrName) return null;
+  if (typeof curioOrName === "object") {
+    if (curioOrName.studyGroup) return curioOrName.studyGroup;
+    return getStudyGroup(curioOrName.name);
+  }
+  const g = parseGem(curioOrName);
+  return g ? `gem:${g.family}` : curioOrName;
+}
+
+// ---------------------------------------------------------------- //
 // Grid packing
 // ---------------------------------------------------------------- //
 
@@ -140,6 +169,7 @@ class Container {
     this.usedCells = 0;
     this.items = new Map(); // slotId -> {curio, x, y}
     this.namesInUse = new Set();
+    this.groupsInUse = new Set();
     this._nextId = 1;
   }
 
@@ -149,10 +179,18 @@ class Container {
     return this.totalWeight + curio.weight <= this.maxWeight + EPS;
   }
 
-  has(name) { return this.namesInUse.has(name); }
+  has(nameOrCurio) {
+    if (!nameOrCurio) return false;
+    const name = typeof nameOrCurio === "string" ? nameOrCurio : nameOrCurio.name;
+    const group = typeof nameOrCurio === "object" && nameOrCurio.studyGroup
+      ? nameOrCurio.studyGroup
+      : getStudyGroup(name);
+    return this.namesInUse.has(name) || this.groupsInUse.has(group);
+  }
 
   add(curio) {
-    if (!this.allowDuplicates && this.namesInUse.has(curio.name)) return null;
+    const group = curio.studyGroup || getStudyGroup(curio.name);
+    if (!this.allowDuplicates && (this.namesInUse.has(curio.name) || this.groupsInUse.has(group))) return null;
     if (!this.fitsWeight(curio)) return null;
     const spot = this.packer.findSpot(curio.w, curio.h);
     if (!spot) return null;
@@ -162,7 +200,10 @@ class Container {
     this.items.set(slotId, { curio, x, y });
     this.totalWeight += curio.weight;
     this.usedCells += curio.cells;
-    if (!this.allowDuplicates) this.namesInUse.add(curio.name);
+    if (!this.allowDuplicates) {
+      this.namesInUse.add(curio.name);
+      this.groupsInUse.add(group);
+    }
     return slotId;
   }
 
@@ -173,7 +214,11 @@ class Container {
     this.packer.remove(item.x, item.y, item.curio.w, item.curio.h);
     this.totalWeight -= item.curio.weight;
     this.usedCells -= item.curio.cells;
-    if (!this.allowDuplicates) this.namesInUse.delete(item.curio.name);
+    if (!this.allowDuplicates) {
+      const group = item.curio.studyGroup || getStudyGroup(item.curio.name);
+      this.namesInUse.delete(item.curio.name);
+      this.groupsInUse.delete(group);
+    }
     return item.curio;
   }
 
@@ -262,8 +307,12 @@ class Planner {
         effectiveMin = Math.max(0, Math.min(Math.floor(Number(c.minCopies)), effectiveMax));
       }
 
+      const g = parseGem(c.name);
+      const studyGroup = g ? `gem:${g.family}` : c.name;
+
       return {
         name: c.name,
+        studyGroup,
         image: c.image,
         producer: c.producer,
         w: c.w,
@@ -379,7 +428,7 @@ class Planner {
     const isUnderMinQuota = (c) => {
       if (!c || c.effectiveMin <= 0) return false;
       const studied = studiedCounts.get(c.name) || 0;
-      const inBuffer = buffer.has(c.name) ? 1 : 0;
+      const inBuffer = buffer.namesInUse.has(c.name) ? 1 : 0;
       return (studied + inBuffer) < c.effectiveMin;
     };
 
@@ -587,5 +636,18 @@ class Planner {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { Planner, METRICS, GridPacker, Container, MinHeap, sortByComparator, buildComparatorKey, BASE_QUALITY };
+  module.exports = {
+    Planner,
+    METRICS,
+    GridPacker,
+    Container,
+    MinHeap,
+    sortByComparator,
+    buildComparatorKey,
+    BASE_QUALITY,
+    GEM_SIZES,
+    GEM_CUTS,
+    parseGem,
+    getStudyGroup,
+  };
 }

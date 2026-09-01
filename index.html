@@ -22,96 +22,119 @@
 
 <div class="layout">
 
-  <!-- LEFT: settings -->
-  <div class="panel">
-    <h2>Settings</h2>
+  <!-- LEFT: settings & import/export -->
+  <div class="sidebar-col">
+    <div class="panel">
+      <h2>Settings</h2>
 
-    <div class="mode-switch">
-      <button type="button" class="mode-btn active" id="modeDesk" data-mode="desk">Study Desk</button>
-      <button type="button" class="mode-btn" id="modeUpkeep" data-mode="upkeep">Upkeep</button>
+      <div class="mode-switch">
+        <button type="button" class="mode-btn active" id="modeDesk" data-mode="desk">Study Desk</button>
+        <button type="button" class="mode-btn" id="modeUpkeep" data-mode="upkeep">Upkeep</button>
+      </div>
+
+      <div class="control" id="controlTableSize">
+        <label>Study Desk size (cells) <span class="val" id="tableSizeVal">12 &times; 12</span></label>
+        <input type="range" id="tableSize" min="5" max="12" step="1" value="12">
+      </div>
+
+      <div class="control" id="controlBufferWeight">
+        <label>Attention <span class="val" id="bufferWeightVal">150</span></label>
+        <input type="range" id="bufferWeight" min="10" max="1500" step="10" value="150">
+        <div class="hint">The Study Report is fixed at 4 &times; 4 cells, as in the game, so
+          Attention is the only study limit you control.</div>
+      </div>
+
+      <div class="control">
+        <label>Planning horizon (days) <span class="val" id="horizonDaysVal">3</span></label>
+        <input type="range" id="horizonDays" min="0.5" max="30" step="0.5" value="3">
+      </div>
+
+      <div class="control" id="controlFitToHorizon">
+        <label class="check"><input type="checkbox" id="fitToHorizon" checked> Fit to horizon</label>
+        <div class="hint">Size the queue so it drains completely within the horizon
+          instead of blindly filling every cell.</div>
+      </div>
+
+      <div class="control">
+        <label>LP multiplier <span class="val" id="lpMultVal">1.0</span></label>
+        <input type="range" id="lpMult" min="0.1" max="10" step="0.1" value="1">
+      </div>
+      <div class="control">
+        <label>Study speed multiplier <span class="val" id="speedMultVal">1.0</span></label>
+        <input type="range" id="speedMult" min="0.1" max="10" step="0.1" value="1">
+      </div>
+      <div class="control">
+        <label>Cell size (px) <span class="val" id="cellSizeVal">30</span></label>
+        <input type="range" id="cellSize" min="20" max="48" step="1" value="30">
+      </div>
+
+      <h2>Priorities</h2>
+      <div class="hint" style="margin-bottom:8px;">
+        Priority 1 is applied first, priority 2 breaks ties.
+      </div>
+
+      <div class="priority-row">
+        <select id="p1metric">
+          <option value="xp_cost">XP cost</option>
+          <option value="points">Learning points (LP)</option>
+          <option value="weight">Weight</option>
+          <option value="study_seconds">Study time</option>
+          <option value="points_per_cost">LP per XP</option>
+          <option value="points_per_cell">LP per cell</option>
+          <option value="lp_per_hour">LP per hour</option>
+          <option value="lp_per_cell_hour">LP per cell-hour</option>
+          <option value="lp_per_weight_hour" selected>LP per weight-hour</option>
+          <option value="xp_per_hour">XP per hour</option>
+        </select>
+        <select id="p1dir">
+          <option value="min">min</option>
+          <option value="max" selected>max</option>
+        </select>
+      </div>
+
+      <div class="priority-row">
+        <select id="p2metric">
+          <option value="xp_cost">XP cost</option>
+          <option value="points" selected>Learning points (LP)</option>
+          <option value="weight">Weight</option>
+          <option value="study_seconds">Study time</option>
+          <option value="points_per_cost">LP per XP</option>
+          <option value="points_per_cell">LP per cell</option>
+          <option value="lp_per_hour">LP per hour</option>
+          <option value="lp_per_cell_hour">LP per cell-hour</option>
+          <option value="lp_per_weight_hour">LP per weight-hour</option>
+          <option value="xp_per_hour">XP per hour</option>
+        </select>
+        <select id="p2dir">
+          <option value="min">min</option>
+          <option value="max" selected>max</option>
+        </select>
+      </div>
+
+      <div class="btn-row" style="margin-top:10px;">
+        <button id="btnReset">Reset to defaults</button>
+      </div>
     </div>
 
-    <div class="control" id="controlTableSize">
-      <label>Study Desk size (cells) <span class="val" id="tableSizeVal">12 &times; 12</span></label>
-      <input type="range" id="tableSize" min="5" max="12" step="1" value="12">
-    </div>
+    <!-- Import & Export -->
+    <div class="panel">
+      <h2>Import &amp; Export</h2>
+      <div class="hint" style="margin-bottom:8px;">
+        Export or import your full setup (curiosity choices, min/max limits, qualities, and settings) as JSON.
+      </div>
 
-    <div class="control" id="controlBufferWeight">
-      <label>Attention <span class="val" id="bufferWeightVal">150</span></label>
-      <input type="range" id="bufferWeight" min="10" max="1500" step="10" value="150">
-      <div class="hint">The Study Report is fixed at 4 &times; 4 cells, as in the game, so
-        Attention is the only study limit you control.</div>
-    </div>
+      <div class="btn-row">
+        <button class="primary" id="btnExportFile" title="Download configuration as a .json file">Export File</button>
+        <button id="btnExportClipboard" title="Copy JSON configuration to clipboard">Copy JSON</button>
+      </div>
 
-    <div class="control">
-      <label>Planning horizon (days) <span class="val" id="horizonDaysVal">3</span></label>
-      <input type="range" id="horizonDays" min="0.5" max="30" step="0.5" value="3">
-    </div>
+      <div class="btn-row">
+        <button id="btnImportFile" title="Import configuration from a .json file">Import File</button>
+        <button id="btnImportClipboard" title="Read JSON configuration from clipboard and apply">Paste &amp; Apply</button>
+      </div>
+      <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;">
 
-    <div class="control" id="controlFitToHorizon">
-      <label class="check"><input type="checkbox" id="fitToHorizon" checked> Fit to horizon</label>
-      <div class="hint">Size the queue so it drains completely within the horizon
-        instead of blindly filling every cell.</div>
-    </div>
-
-    <div class="control">
-      <label>LP multiplier <span class="val" id="lpMultVal">1.0</span></label>
-      <input type="range" id="lpMult" min="0.1" max="10" step="0.1" value="1">
-    </div>
-    <div class="control">
-      <label>Study speed multiplier <span class="val" id="speedMultVal">1.0</span></label>
-      <input type="range" id="speedMult" min="0.1" max="10" step="0.1" value="1">
-    </div>
-    <div class="control">
-      <label>Cell size (px) <span class="val" id="cellSizeVal">30</span></label>
-      <input type="range" id="cellSize" min="20" max="48" step="1" value="30">
-    </div>
-
-    <h2>Priorities</h2>
-    <div class="hint" style="margin-bottom:8px;">
-      Priority 1 is applied first, priority 2 breaks ties.
-    </div>
-
-    <div class="priority-row">
-      <select id="p1metric">
-        <option value="xp_cost">XP cost</option>
-        <option value="points">Learning points (LP)</option>
-        <option value="weight">Weight</option>
-        <option value="study_seconds">Study time</option>
-        <option value="points_per_cost">LP per XP</option>
-        <option value="points_per_cell">LP per cell</option>
-        <option value="lp_per_hour">LP per hour</option>
-        <option value="lp_per_cell_hour">LP per cell-hour</option>
-        <option value="lp_per_weight_hour" selected>LP per weight-hour</option>
-        <option value="xp_per_hour">XP per hour</option>
-      </select>
-      <select id="p1dir">
-        <option value="min">min</option>
-        <option value="max" selected>max</option>
-      </select>
-    </div>
-
-    <div class="priority-row">
-      <select id="p2metric">
-        <option value="xp_cost">XP cost</option>
-        <option value="points" selected>Learning points (LP)</option>
-        <option value="weight">Weight</option>
-        <option value="study_seconds">Study time</option>
-        <option value="points_per_cost">LP per XP</option>
-        <option value="points_per_cell">LP per cell</option>
-        <option value="lp_per_hour">LP per hour</option>
-        <option value="lp_per_cell_hour">LP per cell-hour</option>
-        <option value="lp_per_weight_hour">LP per weight-hour</option>
-        <option value="xp_per_hour">XP per hour</option>
-      </select>
-      <select id="p2dir">
-        <option value="min">min</option>
-        <option value="max" selected>max</option>
-      </select>
-    </div>
-
-    <div class="btn-row" style="margin-top:10px;">
-      <button id="btnReset">Reset to defaults</button>
+      <div class="import-export-status" id="importExportStatus"></div>
     </div>
   </div>
 

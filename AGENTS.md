@@ -37,6 +37,7 @@ Understanding game mechanics is required to prevent invalid optimizations or bro
 - **Strictly Unique Types (No Duplicates in Study Report)**:
   - A character can only study **one copy of any given curiosity type at a time**.
   - Two copies of `Gold Egg` or two copies of `Cone Cow` **cannot** reside in the Study Report simultaneously.
+  - **Gemstones**: All sizes and cuts of the same gem family share the same study slot. Two curiosities of the same gem family (e.g. `Tiny Rough Jade` and `Grand Brilliant Jade`) **cannot** reside in the Study Report simultaneously.
 - **Parallel Independent Study**:
   - All items in the Study Report progress their timers concurrently and independently.
   - An item with duration $t$ completes exactly $t$ seconds after entering the Study Report.
@@ -104,12 +105,13 @@ $$\text{LP}_{\text{effective}} = \text{LP}_{\text{base}} \times \sqrt{\frac{Q}{1
   `"<Size> <Cut> <GemFamily>"`
 - **Sizes (6)**: `Tiny`, `Small`, `Fair`, `Large`, `Grand`, `Jotun`
 - **Cuts (6)**: `Rough`, `Smooth`, `Cabochon`, `Pear`, `Heart`, `Brilliant`
-- **Gem Families (15)**: `Amber`, `Amethyst`, `Coral`, `Diamond`, `Black Diamond`, `Emerald`, `Jade`, `Jewel`, `Moonstone`, `Onyx`, `Opal`, `Ruby`, `Sapphire`, `Topaz`, `Turquoise`
-- **Critical Parsing Rule**: `Diamond` and `Black Diamond` are two separate families. When parsing, family name is the **entire remainder** of the string after Size and Cut:
+- **Gem Families (15)**: `Amber`, `Amethyst`, `Diamond`, `Dust Jewel`, `Emerald`, `Jade`, `Moonstone`, `Onyx`, `Opal`, `Red Coral`, `Ruby`, `Sapphire`, `Sugar Diamond`, `Topaz`, `Turquoise`
+- **Critical Parsing Rule**: `Diamond` and `Sugar Diamond` are two separate families. When parsing, family name is the **entire remainder** of the string after Size and Cut:
   ```javascript
   const p = name.split(" ");
   const family = p.slice(2).join(" ");
   ```
+- **Study Exclusivity Rule**: Only one gemstone of a given family can be studied concurrently in the Study Report (Buffer). Different gem families (e.g. Jade and Ruby) can be studied concurrently.
 
 ### 2.8. Zero XP Cost Curios & Deterministic Sorting
 Four curios have `xpCost = 0`:

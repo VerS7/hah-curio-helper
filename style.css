@@ -141,6 +141,12 @@ header::after {
   .panel-curios{ grid-column: span 1; }
 }
 
+.sidebar-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .panel{
   background: var(--panel);
   border: 1px solid var(--border);
@@ -474,8 +480,10 @@ button.primary{ border-color: var(--accent); color: var(--accent); }
   padding: 4px 7px;
   border-bottom: 1px solid var(--border);
   font-size: var(--fs-sm);
-  cursor:pointer;
 }
+label.curio-row{ cursor: pointer; }
+div.curio-row{ cursor: default; }
+.curio-row input[type="checkbox"]{ cursor: pointer; }
 .curio-row:last-child{ border-bottom:none; }
 .curio-row:hover{ background: #2b2418; }
 .curio-row.over-horizon{ opacity: .4; }
@@ -591,3 +599,31 @@ footer{
 ::-webkit-scrollbar{ width: 9px; height:9px; }
 ::-webkit-scrollbar-track{ background: var(--panel); }
 ::-webkit-scrollbar-thumb{ background: var(--border); border-radius: 4px; }
+
+/* ---- import & export ---- */
+.import-export-status {
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  display: none;
+}
+.import-export-status.is-visible {
+  display: block;
+}
+.import-export-status.success {
+  background: rgba(80, 160, 90, 0.15);
+  border: 1px solid rgba(80, 160, 90, 0.4);
+  color: #a3e8a8;
+}
+.import-export-status.error {
+  background: rgba(176, 85, 74, 0.15);
+  border: 1px solid var(--danger);
+  color: #fca59d;
+}
+.import-export-status.info {
+  background: rgba(201, 162, 75, 0.12);
+  border: 1px solid rgba(201, 162, 75, 0.35);
+  color: var(--text);
+}
