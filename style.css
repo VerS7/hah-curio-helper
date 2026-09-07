@@ -627,3 +627,234 @@ footer{
   border: 1px solid rgba(201, 162, 75, 0.35);
   color: var(--text);
 }
+
+/* ---- Center Tabs (Statistics / Simulate) ---- */
+.center-tabs-wrap {
+  margin: 16px 0 10px 0;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.center-tabs {
+  display: inline-flex;
+  background: var(--cell-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+  gap: 2px;
+}
+
+/* ---- Simulate tab styles ---- */
+.simulate-optin {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.simulate-optin label.check {
+  font-weight: 600;
+  font-size: var(--fs);
+  color: var(--accent);
+}
+
+.sim-scrubber-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.sim-time-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--fs-sm);
+  margin-bottom: 6px;
+}
+
+.sim-time-label {
+  color: var(--text-dim);
+}
+
+.sim-time-val {
+  color: var(--accent);
+  font-weight: 600;
+  font-family: monospace, system-ui, sans-serif;
+}
+
+.sim-slider-row {
+  margin-bottom: 8px;
+}
+
+.sim-slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.sim-playback-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.sim-speed-wrap {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.sim-speed-wrap select {
+  width: auto;
+  padding: 2px 6px;
+}
+
+.sim-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.sim-metric-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.sim-metric-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.sim-metric-val {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.sim-body-layout {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 680px) {
+  .sim-body-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sim-buffer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sim-cell-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(201, 162, 75, 0.7);
+  pointer-events: none;
+  transition: width 0.08s linear;
+}
+
+.sim-studied-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sim-studied-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--cell-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+}
+
+.sim-studied-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  background: var(--panel-2);
+  border: 1px solid #0008;
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+}
+
+.sim-studied-row:hover {
+  border-color: rgba(201, 162, 75, 0.4);
+}
+
+.sim-studied-thumb {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  background: var(--cell-bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sim-studied-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  display: block;
+}
+
+.sim-studied-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.sim-studied-name {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sim-studied-stats {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.sim-studied-lp {
+  color: var(--accent);
+  font-weight: 600;
+}
+

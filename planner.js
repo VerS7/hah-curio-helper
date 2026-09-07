@@ -403,13 +403,14 @@ class Planner {
   // Event-driven simulation over one table content
   // -------------------------------------------------------------- //
 
-  simulateWith(counts, maxEvents = 200000) {
+  simulateWith(counts, maxEvents = 200000, options = {}) {
     const cfg = this.config;
     const horizon = this.horizon;
     const buffer = new Container(cfg.bufferW, cfg.bufferH, cfg.bufferMaxWeight, false);
     const heap = new MinHeap();
     const remaining = new Map(counts);
     const sorted = this.sortedPool;
+    const recordTimeline = !!(options && options.recordTimeline);
 
     let cursor = 0;           // everything before it is exhausted
     let lpGained = 0, xpSpent = 0, studiedCount = 0;
@@ -417,6 +418,10 @@ class Planner {
     let makespan = 0, peakWeight = 0, peakCells = 0;
     let eventsCapped = false;
     let initialSnapshot = null;
+
+    const timelinePlacements = recordTimeline ? [] : null;
+    const activePlacements = recordTimeline ? new Map() : null;
+    const timelineCompletions = recordTimeline ? [] : null;
 
     const allowOverrun = cfg.mode === "upkeep" && !!cfg.fitToHorizon;
 
@@ -437,6 +442,25 @@ class Planner {
       if (slot === null) return false;
       remaining.set(c.name, remaining.get(c.name) - 1);
       heap.push(now + c.studySeconds, slot);
+
+      if (recordTimeline) {
+        const item = buffer.items.get(slot);
+        const rec = {
+          id: slot,
+          name: c.name,
+          curio: c,
+          x: item.x,
+          y: item.y,
+          w: c.w,
+          h: c.h,
+          startTime: now,
+          finishTime: now + c.studySeconds,
+          completed: false,
+        };
+        timelinePlacements.push(rec);
+        activePlacements.set(slot, rec);
+      }
+
       return true;
     };
 
@@ -495,11 +519,33 @@ class Planner {
 
       const done = buffer.remove(slotId);
       if (!done) continue;
+
+      if (recordTimeline) {
+        const rec = activePlacements.get(slotId);
+        if (rec) {
+          rec.completed = true;
+          activePlacements.delete(slotId);
+        }
+      }
+
       lpGained += done.points;
       xpSpent += done.xpCost;
       studiedCount++;
       studiedCounts.set(done.name, (studiedCounts.get(done.name) || 0) + 1);
       if (finish > makespan) makespan = finish;
+
+      if (recordTimeline) {
+        timelineCompletions.push({
+          time: finish,
+          curio: done,
+          name: done.name,
+          points: done.points,
+          xpCost: done.xpCost,
+          cumulativeLp: lpGained,
+          cumulativeXp: xpSpent,
+          cumulativeStudied: studiedCount,
+        });
+      }
 
       refill(finish, done.name);
     }
@@ -520,6 +566,10 @@ class Planner {
       bufferTotalCells: buffer.totalCells,
       eventsCapped,
       initialSnapshot,
+      timeline: recordTimeline ? {
+        placements: timelinePlacements,
+        completions: timelineCompletions,
+      } : null,
     };
   }
 
@@ -527,15 +577,16 @@ class Planner {
   // Run simulation: Desk mode or Upkeep mode
   // -------------------------------------------------------------- //
 
-  run() {
+  run(options = {}) {
     const mode = this.config.mode || "desk";
+    const recordTimeline = !!(options && options.recordTimeline);
 
     if (mode === "upkeep") {
       const upkeepCounts = new Map();
       for (const c of this.sortedPool) {
         upkeepCounts.set(c.name, c.effectiveMax);
       }
-      const stats = this.simulateWith(upkeepCounts);
+      const stats = this.simulateWith(upkeepCounts, 200000, { recordTimeline });
       this.result = { mode: "upkeep", stats };
       return this.report();
     }
@@ -559,7 +610,7 @@ class Planner {
     }
 
     const built = this.buildTable(budget);
-    const stats = this.simulateWith(built.counts);
+    const stats = this.simulateWith(built.counts, 200000, { recordTimeline });
 
     this.result = { mode: "desk", built, stats, fit, totalCells };
     return this.report();
@@ -598,6 +649,7 @@ class Planner {
           totalCells: cfg.bufferW * cfg.bufferH,
         },
         fit: { enabled: !!cfg.fitToHorizon },
+        timeline: stats.timeline || null,
         stats: {
           lpGained: stats.lpGained,
           xpSpent: stats.xpSpent,
@@ -634,6 +686,7 @@ class Planner {
         totalCells: cfg.bufferW * cfg.bufferH,
       },
       fit,
+      timeline: stats.timeline || null,
       stats: {
         lpGained: stats.lpGained,
         xpSpent: stats.xpSpent,

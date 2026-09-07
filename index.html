@@ -163,8 +163,103 @@
       Hover a tile to see the curio stats.
     </div>
 
-    <h2>Statistics</h2>
-    <div id="statsBox"></div>
+    <div class="center-tabs-wrap">
+      <div class="center-tabs">
+        <button type="button" class="tab-btn active" id="tabCenterStats" data-tab="stats">Statistics</button>
+        <button type="button" class="tab-btn" id="tabCenterSimulate" data-tab="simulate">Simulate</button>
+      </div>
+    </div>
+
+    <!-- Statistics Tab View -->
+    <div id="tabContentStats" class="tab-content active">
+      <div id="statsBox"></div>
+    </div>
+
+    <!-- Simulate Tab View -->
+    <div id="tabContentSimulate" class="tab-content is-hidden">
+      <div class="simulate-optin">
+        <label class="check">
+          <input type="checkbox" id="enableSimulate">
+          <span>Enable simulation</span>
+        </label>
+        <div class="hint">
+          Simulate the curiosity study progression over time. Step or scrub through the timeline to see active curiosities in the Study Report, when curiosities finish, and the cumulative LP and XP gained.
+        </div>
+      </div>
+
+      <div id="simulateActiveWrap" class="simulate-active is-hidden">
+        <!-- Scrubber card -->
+        <div class="sim-scrubber-card">
+          <div class="sim-time-header">
+            <span class="sim-time-label">Timeline Progress:</span>
+            <span class="sim-time-val" id="simTimeDisplay">0d 00h 00m / 3d 00h 00m (0.0%)</span>
+          </div>
+          <div class="sim-slider-row">
+            <input type="range" id="simTimeSlider" min="0" max="1000" step="1" value="0">
+          </div>
+          <div class="sim-playback-controls">
+            <button type="button" id="simBtnStart" title="Jump to start (0s)">&#x23EE; Start</button>
+            <button type="button" id="simBtnPrev" title="Jump to previous completion">&#x25C0; Prev</button>
+            <button type="button" id="simBtnPlay" class="primary" title="Play or pause playback">&#x25B6; Play</button>
+            <button type="button" id="simBtnNext" title="Jump to next completion">Next &#x25B6;</button>
+            <button type="button" id="simBtnEnd" title="Jump to end">&#x23ED; End</button>
+            <div class="sim-speed-wrap">
+              <label for="simSpeedSelect">Speed:</label>
+              <select id="simSpeedSelect">
+                <option value="1">1h / s</option>
+                <option value="6" selected>6h / s</option>
+                <option value="24">1d / s</option>
+                <option value="72">3d / s</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric badges at time t -->
+        <div class="sim-metrics-grid">
+          <div class="sim-metric-card">
+            <span class="sim-metric-label">LP Gained</span>
+            <b class="sim-metric-val" id="simMetricLp">0</b>
+          </div>
+          <div class="sim-metric-card">
+            <span class="sim-metric-label">XP Spent</span>
+            <b class="sim-metric-val" id="simMetricXp">0</b>
+          </div>
+          <div class="sim-metric-card">
+            <span class="sim-metric-label">Completed</span>
+            <b class="sim-metric-val" id="simMetricStudied">0</b>
+          </div>
+          <div class="sim-metric-card">
+            <span class="sim-metric-label">Attention</span>
+            <b class="sim-metric-val" id="simMetricWeight">0 / 150</b>
+          </div>
+          <div class="sim-metric-card">
+            <span class="sim-metric-label">Report Cells</span>
+            <b class="sim-metric-val" id="simMetricCells">0 / 16</b>
+          </div>
+        </div>
+
+        <!-- Two sections: Current Study Report at time t & Completed Curiosities list -->
+        <div class="sim-body-layout">
+          <div class="sim-buffer-section">
+            <div class="grid-title">
+              <h3>Study Report at this moment</h3>
+              <span class="meta" id="simBufferMeta"></span>
+            </div>
+            <div class="grid-box" id="simBufferGrid"></div>
+            <div class="hint">Active items studying at this moment. Gold bars indicate progress.</div>
+          </div>
+
+          <div class="sim-studied-section">
+            <div class="grid-title">
+              <h3>Completed Curiosities</h3>
+              <span class="meta" id="simStudiedMeta">0 items</span>
+            </div>
+            <div class="sim-studied-list" id="simStudiedList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- RIGHT: curio selection -->

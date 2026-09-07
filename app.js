@@ -116,6 +116,8 @@ const quality = new Map(); // name -> quality
 const minQuantities = new Map(); // name -> min
 const maxQuantities = new Map(); // name -> max
 let currentCurioTab = "all"; // "all" | "selected"
+let currentCenterTab = "stats"; // "stats" | "simulate"
+let simulateEnabled = false;
 
 function getQuality(name) {
   const q = quality.get(name);
@@ -309,7 +311,13 @@ function saveState() {
       minQty: Object.fromEntries(minQuantities),
       maxQty: Object.fromEntries(maxQuantities),
       config: readConfigFromControls(),
-      ui: { collapsedGroups: [...collapsedGroups], searchTerm, curioTab: currentCurioTab },
+      ui: {
+        collapsedGroups: [...collapsedGroups],
+        searchTerm,
+        curioTab: currentCurioTab,
+        centerTab: currentCenterTab,
+        simulateEnabled: simulateEnabled,
+      },
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch (e) {
@@ -406,8 +414,15 @@ function loadState() {
     if (data.ui.curioTab === "selected" || data.ui.curioTab === "all") {
       currentCurioTab = data.ui.curioTab;
     }
+    if (data.ui.centerTab === "stats" || data.ui.centerTab === "simulate") {
+      currentCenterTab = data.ui.centerTab;
+    }
+    if (typeof data.ui.simulateEnabled === "boolean") {
+      simulateEnabled = data.ui.simulateEnabled;
+    }
   }
   syncCurioTabsUI();
+  syncCenterTabsUI();
 }
 
 // ---------------------------------------------------------------- //
@@ -905,7 +920,11 @@ document.getElementById("btnReset").addEventListener("click", () => {
   searchTerm = "";
   searchInput.value = "";
   currentCurioTab = "all";
+  currentCenterTab = "stats";
+  simulateEnabled = false;
+  stopSimPlayback();
   syncCurioTabsUI();
+  syncCenterTabsUI();
   syncSliderLabels();
   renderCurioList();
   scheduleSave();
@@ -976,18 +995,20 @@ function recompute() {
     renderQueue([], config, null);
     renderGrid("bufferGrid", [], config.bufferW, config.bufferH, "No curiosities selected");
     renderStats(null, config);
+    updateSimulationReport(null, config);
     if (horizonChanged) renderCurioList();
     return;
   }
 
   const planner = new Planner(candidates, config);
-  const report = planner.run();
+  const report = planner.run({ recordTimeline: simulateEnabled });
 
   const groups = report.mode === "upkeep" ? report.upkeep.groups : report.table.groups;
   renderQueue(groups, config, report);
   renderGrid("bufferGrid", report.buffer.placed, config.bufferW, config.bufferH,
     report.buffer.placed.length ? null : "Study Report empty: nothing fits Attention");
   renderStats(report, config);
+  updateSimulationReport(report, config);
 
   if (horizonChanged) renderCurioList();
 }
@@ -1202,6 +1223,419 @@ function renderStats(report, config) {
 
   el.innerHTML = html;
 }
+
+// ---------------------------------------------------------------- //
+// Simulation & Timeline Scrubber
+// ---------------------------------------------------------------- //
+
+const tabCenterStats = document.getElementById("tabCenterStats");
+const tabCenterSimulate = document.getElementById("tabCenterSimulate");
+const tabContentStats = document.getElementById("tabContentStats");
+const tabContentSimulate = document.getElementById("tabContentSimulate");
+const enableSimulateCheck = document.getElementById("enableSimulate");
+const simulateActiveWrap = document.getElementById("simulateActiveWrap");
+
+const simTimeDisplay = document.getElementById("simTimeDisplay");
+const simTimeSlider = document.getElementById("simTimeSlider");
+const simBtnStart = document.getElementById("simBtnStart");
+const simBtnPrev = document.getElementById("simBtnPrev");
+const simBtnPlay = document.getElementById("simBtnPlay");
+const simBtnNext = document.getElementById("simBtnNext");
+const simBtnEnd = document.getElementById("simBtnEnd");
+const simSpeedSelect = document.getElementById("simSpeedSelect");
+
+const simMetricLp = document.getElementById("simMetricLp");
+const simMetricXp = document.getElementById("simMetricXp");
+const simMetricStudied = document.getElementById("simMetricStudied");
+const simMetricWeight = document.getElementById("simMetricWeight");
+const simMetricCells = document.getElementById("simMetricCells");
+
+const simBufferGrid = document.getElementById("simBufferGrid");
+const simBufferMeta = document.getElementById("simBufferMeta");
+const simStudiedList = document.getElementById("simStudiedList");
+const simStudiedMeta = document.getElementById("simStudiedMeta");
+
+let simCurrentTime = 0;
+let simPlaying = false;
+let simAnimFrameId = null;
+let simLastTimestamp = null;
+let simMaxTime = 0;
+let simReportCache = null;
+let simConfigCache = null;
+
+function syncCenterTabsUI() {
+  const isSim = currentCenterTab === "simulate";
+  if (tabCenterStats) tabCenterStats.classList.toggle("active", !isSim);
+  if (tabCenterSimulate) tabCenterSimulate.classList.toggle("active", isSim);
+  if (tabContentStats) tabContentStats.classList.toggle("is-hidden", isSim);
+  if (tabContentSimulate) tabContentSimulate.classList.toggle("is-hidden", !isSim);
+
+  if (enableSimulateCheck) enableSimulateCheck.checked = simulateEnabled;
+  if (simulateActiveWrap) simulateActiveWrap.classList.toggle("is-hidden", !simulateEnabled);
+}
+
+function setCenterTab(tab) {
+  const next = tab === "simulate" ? "simulate" : "stats";
+  if (currentCenterTab === next) return;
+  currentCenterTab = next;
+  syncCenterTabsUI();
+  scheduleSave();
+}
+
+function fmtDetailedDuration(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  const pad = n => String(n).padStart(2, "0");
+  if (days > 0) {
+    return `${days}d ${pad(hours)}h ${pad(mins)}m ${pad(secs)}s`;
+  }
+  return `${pad(hours)}h ${pad(mins)}m ${pad(secs)}s`;
+}
+
+function updateSimulationReport(report, config) {
+  simReportCache = report;
+  simConfigCache = config;
+
+  if (!report || !report.timeline || !simulateEnabled) {
+    stopSimPlayback();
+    if (simTimeSlider) {
+      simTimeSlider.min = "0";
+      simTimeSlider.max = "0";
+      simTimeSlider.value = "0";
+    }
+    if (simTimeDisplay) simTimeDisplay.textContent = "0s / 0s (0.0%)";
+    if (simBufferGrid) renderSimBufferGrid([], 0);
+    if (simStudiedList) renderSimStudiedList([]);
+    return;
+  }
+
+  const horizon = config.horizonSeconds || 0;
+  const makespan = report.stats.makespan || 0;
+  simMaxTime = Math.max(horizon, makespan);
+  if (simMaxTime <= 0) simMaxTime = 1;
+
+  if (simTimeSlider) {
+    simTimeSlider.min = "0";
+    simTimeSlider.max = String(Math.ceil(simMaxTime));
+    simTimeSlider.step = "1";
+    if (simCurrentTime > simMaxTime) simCurrentTime = simMaxTime;
+    simTimeSlider.value = String(Math.round(simCurrentTime));
+  }
+
+  renderSimulationAt(simCurrentTime);
+}
+
+function renderSimulationAt(t) {
+  if (!simReportCache || !simReportCache.timeline) return;
+
+  const cfg = simConfigCache || DEFAULT_CONFIG;
+  const totalCells = BUFFER_W * BUFFER_H;
+  const maxWeight = cfg.bufferMaxWeight || 150;
+  const maxTime = simMaxTime || 1;
+  const currentTime = Math.max(0, Math.min(t, maxTime));
+  simCurrentTime = currentTime;
+
+  if (simTimeSlider && document.activeElement !== simTimeSlider) {
+    simTimeSlider.value = String(Math.round(currentTime));
+  }
+
+  const pct = ((currentTime / maxTime) * 100).toFixed(1);
+  if (simTimeDisplay) {
+    simTimeDisplay.textContent = `${fmtDetailedDuration(currentTime)} / ${fmtDetailedDuration(maxTime)} (${pct}%)`;
+  }
+
+  const { placements, completions } = simReportCache.timeline;
+
+  // 1. Active items in 4x4 Study Report at time currentTime
+  const activeItems = [];
+  let bufferWeight = 0;
+  let bufferCells = 0;
+
+  for (const p of placements) {
+    const started = p.startTime <= currentTime + 1e-9;
+    const notFinished = currentTime < p.finishTime - 1e-9;
+
+    if (started && notFinished) {
+      activeItems.push(p);
+      bufferWeight += p.curio.weight;
+      bufferCells += p.w * p.h;
+    }
+  }
+
+  // Update live metric badges
+  if (simMetricWeight) simMetricWeight.textContent = `${fmtNum(bufferWeight)} / ${fmtNum(maxWeight)}`;
+  if (simMetricCells) simMetricCells.textContent = `${bufferCells} / ${totalCells}`;
+  if (simBufferMeta) {
+    simBufferMeta.textContent = `${bufferCells} / ${totalCells} cells · Att ${fmtNum(bufferWeight)} / ${fmtNum(maxWeight)}`;
+  }
+
+  // Render 4x4 buffer grid at currentTime
+  renderSimBufferGrid(activeItems, currentTime);
+
+  // 2. Completed curiosities up to currentTime
+  const doneItems = [];
+  let cumulativeLp = 0;
+  let cumulativeXp = 0;
+
+  for (const c of completions) {
+    if (c.time <= currentTime + 1e-9) {
+      doneItems.push(c);
+      cumulativeLp = c.cumulativeLp;
+      cumulativeXp = c.cumulativeXp;
+    } else {
+      break;
+    }
+  }
+
+  if (simMetricLp) simMetricLp.textContent = fmtInt(cumulativeLp);
+  if (simMetricXp) simMetricXp.textContent = fmtInt(cumulativeXp);
+  if (simMetricStudied) simMetricStudied.textContent = fmtInt(doneItems.length);
+
+  // Render completed list
+  renderSimStudiedList(doneItems);
+}
+
+function renderSimBufferGrid(activeItems, currentTime) {
+  const el = document.getElementById("simBufferGrid");
+  if (!el) return;
+  el.innerHTML = "";
+  el.style.setProperty("--cols", BUFFER_W);
+  el.style.setProperty("--rows", BUFFER_H);
+  el.style.backgroundImage =
+    "linear-gradient(to right, var(--cell-line) 1px, transparent 1px)," +
+    "linear-gradient(to bottom, var(--cell-line) 1px, transparent 1px)";
+  el.style.backgroundSize = `${100 / BUFFER_W}% 100%, 100% ${100 / BUFFER_H}%`;
+
+  if (activeItems.length === 0) {
+    const note = document.createElement("div");
+    note.className = "empty-note";
+    note.textContent = "Study Report idle at this time";
+    el.appendChild(note);
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for (const it of activeItems) {
+    const div = document.createElement("div");
+    div.className = "cell-item";
+    div.style.left = `${(it.x / BUFFER_W) * 100}%`;
+    div.style.top = `${(it.y / BUFFER_H) * 100}%`;
+    div.style.width = `${(it.w / BUFFER_W) * 100}%`;
+    div.style.height = `${(it.h / BUFFER_H) * 100}%`;
+
+    const totalDur = it.finishTime - it.startTime;
+    const elapsed = Math.max(0, currentTime - it.startTime);
+    const rem = Math.max(0, it.finishTime - currentTime);
+    const progress = totalDur > 0 ? Math.min(1, Math.max(0, elapsed / totalDur)) : 1;
+
+    const extra = [
+      `Study progress: ${(progress * 100).toFixed(1)}%`,
+      `Elapsed: ${fmtDuration(elapsed)} / ${fmtDuration(totalDur)}`,
+      `Remaining: ${fmtDuration(rem)}`,
+    ];
+    div.title = tooltipFor(it.curio, extra);
+
+    attachImg(div, getImageUrl(it.curio.image), it.name);
+
+    const progBar = document.createElement("div");
+    progBar.className = "sim-cell-progress";
+    progBar.style.width = `${(progress * 100).toFixed(1)}%`;
+    div.appendChild(progBar);
+
+    frag.appendChild(div);
+  }
+  el.appendChild(frag);
+}
+
+function renderSimStudiedList(doneItems) {
+  const el = document.getElementById("simStudiedList");
+  const meta = document.getElementById("simStudiedMeta");
+  if (!el) return;
+  el.innerHTML = "";
+
+  if (doneItems.length === 0) {
+    if (meta) meta.textContent = "0 items";
+    const note = document.createElement("div");
+    note.className = "empty-note static";
+    note.textContent = "No curiosities completed yet.";
+    el.appendChild(note);
+    return;
+  }
+
+  const grouped = new Map();
+  for (const it of doneItems) {
+    const existing = grouped.get(it.name);
+    if (existing) {
+      existing.count++;
+      existing.totalPoints += it.points;
+      existing.totalXp += it.xpCost;
+      existing.lastTime = it.time;
+    } else {
+      grouped.set(it.name, {
+        name: it.name,
+        curio: it.curio,
+        count: 1,
+        totalPoints: it.points,
+        totalXp: it.xpCost,
+        lastTime: it.time,
+      });
+    }
+  }
+
+  const sortedGroups = [...grouped.values()].sort((a, b) => {
+    if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  });
+
+  if (meta) {
+    meta.textContent = `${doneItems.length} studied · ${sortedGroups.length} distinct types`;
+  }
+
+  const frag = document.createDocumentFragment();
+  for (const g of sortedGroups) {
+    const row = document.createElement("div");
+    row.className = "sim-studied-row";
+    row.title = tooltipFor(g.curio, [
+      `Completed so far: ${g.count}`,
+      `Total LP gained: ${fmtInt(g.totalPoints)}`,
+      `Total XP spent: ${fmtInt(g.totalXp)}`,
+    ]);
+
+    const thumb = document.createElement("div");
+    thumb.className = "sim-studied-thumb";
+    attachImg(thumb, getImageUrl(g.curio.image), g.name);
+    row.appendChild(thumb);
+
+    const info = document.createElement("div");
+    info.className = "sim-studied-info";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "sim-studied-name";
+    nameSpan.innerHTML = `${g.name} <b>&times;${g.count}</b>`;
+    info.appendChild(nameSpan);
+
+    const statsSpan = document.createElement("span");
+    statsSpan.className = "sim-studied-stats";
+    statsSpan.innerHTML = `<span class="sim-studied-lp">+${fmtInt(g.totalPoints)} LP</span> &middot; -${fmtInt(g.totalXp)} XP`;
+    info.appendChild(statsSpan);
+
+    row.appendChild(info);
+    frag.appendChild(row);
+  }
+  el.appendChild(frag);
+}
+
+function toggleSimPlayback() {
+  if (simPlaying) {
+    stopSimPlayback();
+  } else {
+    startSimPlayback();
+  }
+}
+
+function startSimPlayback() {
+  if (!simReportCache || !simReportCache.timeline) return;
+  if (simCurrentTime >= simMaxTime - 1e-6) {
+    simCurrentTime = 0;
+  }
+  simPlaying = true;
+  simLastTimestamp = null;
+  if (simBtnPlay) simBtnPlay.innerHTML = "&#x23F8; Pause";
+  simAnimFrameId = requestAnimationFrame(simPlaybackStep);
+}
+
+function stopSimPlayback() {
+  simPlaying = false;
+  if (simAnimFrameId !== null) {
+    cancelAnimationFrame(simAnimFrameId);
+    simAnimFrameId = null;
+  }
+  simLastTimestamp = null;
+  if (simBtnPlay) simBtnPlay.innerHTML = "&#x25B6; Play";
+}
+
+function simPlaybackStep(timestamp) {
+  if (!simPlaying) return;
+  if (simLastTimestamp === null) {
+    simLastTimestamp = timestamp;
+  }
+  const dt = Math.min((timestamp - simLastTimestamp) / 1000, 0.2);
+  simLastTimestamp = timestamp;
+
+  const hoursPerSec = parseFloat(simSpeedSelect?.value) || 6;
+  simCurrentTime += dt * hoursPerSec * 3600;
+
+  if (simCurrentTime >= simMaxTime) {
+    simCurrentTime = simMaxTime;
+    renderSimulationAt(simCurrentTime);
+    stopSimPlayback();
+    return;
+  }
+
+  renderSimulationAt(simCurrentTime);
+  simAnimFrameId = requestAnimationFrame(simPlaybackStep);
+}
+
+function simStepPrev() {
+  stopSimPlayback();
+  if (!simReportCache || !simReportCache.timeline) return;
+  const { completions } = simReportCache.timeline;
+  let target = 0;
+  for (let i = completions.length - 1; i >= 0; i--) {
+    if (completions[i].time < simCurrentTime - 1) {
+      target = completions[i].time;
+      break;
+    }
+  }
+  renderSimulationAt(target);
+}
+
+function simStepNext() {
+  stopSimPlayback();
+  if (!simReportCache || !simReportCache.timeline) return;
+  const { completions } = simReportCache.timeline;
+  let target = simMaxTime;
+  for (let i = 0; i < completions.length; i++) {
+    if (completions[i].time > simCurrentTime + 1) {
+      target = completions[i].time;
+      break;
+    }
+  }
+  renderSimulationAt(target);
+}
+
+// Wire simulation event listeners
+if (tabCenterStats) tabCenterStats.addEventListener("click", () => setCenterTab("stats"));
+if (tabCenterSimulate) tabCenterSimulate.addEventListener("click", () => setCenterTab("simulate"));
+if (enableSimulateCheck) {
+  enableSimulateCheck.addEventListener("change", () => {
+    simulateEnabled = enableSimulateCheck.checked;
+    if (!simulateEnabled) stopSimPlayback();
+    syncCenterTabsUI();
+    scheduleSave();
+    scheduleRecompute();
+  });
+}
+if (simTimeSlider) {
+  simTimeSlider.addEventListener("input", () => {
+    stopSimPlayback();
+    renderSimulationAt(parseFloat(simTimeSlider.value));
+  });
+}
+if (simBtnStart) simBtnStart.addEventListener("click", () => {
+  stopSimPlayback();
+  renderSimulationAt(0);
+});
+if (simBtnEnd) simBtnEnd.addEventListener("click", () => {
+  stopSimPlayback();
+  renderSimulationAt(simMaxTime);
+});
+if (simBtnPrev) simBtnPrev.addEventListener("click", simStepPrev);
+if (simBtnNext) simBtnNext.addEventListener("click", simStepNext);
+if (simBtnPlay) simBtnPlay.addEventListener("click", toggleSimPlayback);
 
 // ---------------------------------------------------------------- //
 // Import & Export Configuration
@@ -1522,6 +1956,7 @@ if (btnImportClipboard) btnImportClipboard.addEventListener("click", importFromC
 
 applyConfigToControls(DEFAULT_CONFIG);
 loadState();
+syncCenterTabsUI();
 syncSliderLabels();
 horizonSecondsForList = parseFloat(controls.horizonDays.value) * 86400;
 speedForList = parseFloat(controls.speedMult.value);

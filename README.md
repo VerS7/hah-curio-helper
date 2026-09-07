@@ -6,30 +6,41 @@ Curiosity Planner is a zero-dependency, client-side web application designed to 
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Quick Start](#quick-start)
-- [Core Mechanics and Domain Rules](#core-mechanics-and-domain-rules)
-  - [Workstation vs. Storage Queue](#workstation-vs-storage-queue)
-  - [Exclusivity and Gemstone Families](#exclusivity-and-gemstone-families)
-  - [Refill Event Loop](#refill-event-loop)
-- [Operational Modes](#operational-modes)
-  - [Study Desk Mode](#1-study-desk-mode)
-  - [Upkeep Mode](#2-upkeep-mode)
-- [Features and Configuration](#features-and-configuration)
-  - [Simulation Controls](#simulation-controls)
-  - [Optimization Priorities](#optimization-priorities)
-  - [Curiosity Catalog, Search, and Tabs](#curiosity-catalog-search-and-tabs)
-  - [Fine-Grained Constraints: Min, Max, and Quality](#fine-grained-constraints-min-max-and-quality)
-  - [Gemstone Bulk Management](#gemstone-bulk-management)
-  - [Configuration Import and Export](#configuration-import-and-export)
-- [Statistics and Bottleneck Diagnostics](#statistics-and-bottleneck-diagnostics)
-- [Mathematical Formulas](#mathematical-formulas)
-- [Project Architecture and Files](#project-architecture-and-files)
-- [Development and Testing](#development-and-testing)
-  - [Headless Simulation Verification](#headless-simulation-verification)
-  - [Benchmark Baselines](#benchmark-baselines)
-  - [Catalog Data Regeneration](#catalog-data-regeneration)
-- [Disclaimer](#disclaimer)
+- [Curiosity Planner for Haven \& Hearth](#curiosity-planner-for-haven--hearth)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Quick Start](#quick-start)
+    - [Running in Browser](#running-in-browser)
+    - [Running via Local HTTP Server (Optional)](#running-via-local-http-server-optional)
+  - [Core Mechanics and Domain Rules](#core-mechanics-and-domain-rules)
+    - [Workstation vs. Storage Queue](#workstation-vs-storage-queue)
+    - [Exclusivity and Gemstone Families](#exclusivity-and-gemstone-families)
+    - [Refill Event Loop](#refill-event-loop)
+  - [Operational Modes](#operational-modes)
+    - [1. Study Desk Mode](#1-study-desk-mode)
+    - [2. Upkeep Mode](#2-upkeep-mode)
+  - [Features and Configuration](#features-and-configuration)
+    - [Simulation Controls](#simulation-controls)
+    - [Optimization Priorities](#optimization-priorities)
+    - [Curiosity Catalog, Search, and Tabs](#curiosity-catalog-search-and-tabs)
+    - [Fine-Grained Constraints: Min, Max, and Quality](#fine-grained-constraints-min-max-and-quality)
+    - [Gemstone Bulk Management](#gemstone-bulk-management)
+    - [Configuration Import and Export](#configuration-import-and-export)
+  - [Statistics and Bottleneck Diagnostics](#statistics-and-bottleneck-diagnostics)
+    - [Diagnostic Engine](#diagnostic-engine)
+  - [Mathematical Formulas](#mathematical-formulas)
+    - [1. Quality Scaling](#1-quality-scaling)
+    - [2. Multiplier Pipeline](#2-multiplier-pipeline)
+    - [3. Natural Horizon Capacity](#3-natural-horizon-capacity)
+  - [Project Architecture and Files](#project-architecture-and-files)
+  - [Development and Testing](#development-and-testing)
+    - [Headless Simulation Verification](#headless-simulation-verification)
+      - [Study Desk Mode (3 Days Horizon Baseline)](#study-desk-mode-3-days-horizon-baseline)
+      - [Upkeep Mode (3 Days Horizon Baseline)](#upkeep-mode-3-days-horizon-baseline)
+      - [Min and Max Constraints Verification](#min-and-max-constraints-verification)
+    - [Benchmark Baselines](#benchmark-baselines)
+    - [Catalog Data Regeneration](#catalog-data-regeneration)
+  - [Disclaimer](#disclaimer)
 
 ---
 
@@ -188,6 +199,17 @@ Save and share complete setups (selected curios, custom qualities, min/max limit
 - **Import File**: Uploads and restores configuration from a `.json` file.
 - **Paste & Apply**: Reads JSON configuration from clipboard and updates UI and simulation state.
 - **Automatic Persistence**: All state changes are automatically debounced (400ms) and saved to browser `localStorage` (`hah-curio-planner:v1`).
+
+### Interactive Simulation Timeline ("Simulate" Tab)
+
+Located below the Upkeep & Study Report grids in the center panel, the **Simulate** tab provides an interactive time-travel player:
+- **Opt-In Toggle**: Disabled by default (`Enable simulation` checkbox) to avoid unnecessary processing overhead during rapid setup adjustments.
+- **Time Scrubber**: Smooth slider navigating from $t=0$ to the horizon or makespan. Displays timestamp (`0d 14h 32m 00s / 3d 00h 00m`) and completion percentage.
+- **Playback Controls**: Play/Pause (`▶` / `❚❚`), step to previous completion (`◀ Prev`), step to next completion (`Next ▶`), jump to start/end, and playback speed selector (`1h/s`, `6h/s`, `1d/s`, `3d/s`).
+- **Real-Time State at Time $t$**:
+  - **Live Study Report (4×4)**: Shows curiosities actively occupying the buffer at time $t$, complete with animated progress bars on each cell and time remaining tooltips.
+  - **Completed Curiosities List**: Displays all items finished up to time $t$, grouped by type with quantity counts (`×N`), total LP gained, and total XP spent.
+  - **Dynamic Metrics**: Instant readouts for accumulated LP, spent XP, completed study count, active Attention, and Study Report cells in use at time $t$.
 
 ---
 
