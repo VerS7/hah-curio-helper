@@ -296,7 +296,8 @@ class Planner {
       const q = Number.isFinite(c.quality) && c.quality > 0 ? c.quality : BASE_QUALITY;
       const qMult = Math.sqrt(q / BASE_QUALITY);
       const studySeconds = Math.max(c.studySeconds / spMult, EPS);
-      const horizonCap = Math.max(1, Math.floor((this.horizon + EPS) / studySeconds));
+      const allowOverrun = config.mode === "upkeep" && !!config.fitToHorizon;
+      const horizonCap = Math.max(1, Math.floor((this.horizon + EPS) / studySeconds + (allowOverrun ? 0.2 : 0)));
 
       let effectiveMax = horizonCap;
       if (c.maxCopies !== undefined && c.maxCopies !== null && Number.isFinite(Number(c.maxCopies))) {
@@ -334,7 +335,14 @@ class Planner {
     });
 
     // Speed multiplier also widens what fits inside the horizon. Curios with effectiveMax === 0 are excluded.
-    this.pool = effective.filter(c => c.studySeconds <= this.horizon + EPS && c.effectiveMax > 0);
+    // In Upkeep mode with fitToHorizon, curios whose study time exceeds horizon by at most 20% are included.
+    const allowOverrun = config.mode === "upkeep" && !!config.fitToHorizon;
+    this.pool = effective.filter(c => {
+      if (c.effectiveMax <= 0) return false;
+      return allowOverrun
+        ? c.studySeconds * 0.8 <= this.horizon + EPS
+        : c.studySeconds <= this.horizon + EPS;
+    });
     this.excludedByHorizon = effective.length - this.pool.length;
 
     this.keyFn = buildComparatorKey(config.priorities);
@@ -410,13 +418,20 @@ class Planner {
     let eventsCapped = false;
     let initialSnapshot = null;
 
+    const allowOverrun = cfg.mode === "upkeep" && !!cfg.fitToHorizon;
+
     const tryPlace = (c, now) => {
       if (!c) return false;
       if ((remaining.get(c.name) || 0) <= 0) return false;
       // The buffer studies each type only once at a time.
       if (buffer.has(c.name)) return false;
       // Rule 7: never occupy a slot with something that cannot finish in time.
-      if (c.studySeconds > horizon - now + EPS) return false;
+      // In Upkeep mode with fitToHorizon, allow curios finishing within 20% of their study time past horizon.
+      if (allowOverrun) {
+        if (now + c.studySeconds > horizon + 0.2 * c.studySeconds + EPS) return false;
+      } else {
+        if (c.studySeconds > horizon - now + EPS) return false;
+      }
       if (!buffer.fitsWeight(c)) return false;
       const slot = buffer.add(c);
       if (slot === null) return false;
@@ -437,6 +452,7 @@ class Planner {
     // 2. Same type first (it just left the buffer, so its slot is free again)
     // 3. Best available type by priority that is not already being studied
     const refill = (now, preferName) => {
+      if (now >= horizon + EPS) return;
       for (;;) {
         let placed = false;
 
@@ -474,7 +490,7 @@ class Planner {
     while (heap.size > 0) {
       if (events >= maxEvents) { eventsCapped = true; break; }
       const [finish, slotId] = heap.pop();
-      if (finish > horizon + EPS) break; // cannot happen given rule 7, kept as a guard
+      if (!allowOverrun && finish > horizon + EPS) break;
       events++;
 
       const done = buffer.remove(slotId);
@@ -574,12 +590,14 @@ class Planner {
           groups,
           totalItems: stats.studiedCount,
           distinctTypes: groups.length,
+          fitToHorizon: !!cfg.fitToHorizon,
         },
         buffer: {
           placed: stats.initialSnapshot || [],
           maxWeight: cfg.bufferMaxWeight,
           totalCells: cfg.bufferW * cfg.bufferH,
         },
+        fit: { enabled: !!cfg.fitToHorizon },
         stats: {
           lpGained: stats.lpGained,
           xpSpent: stats.xpSpent,

@@ -176,7 +176,13 @@ function syncModeUI() {
   if (modeDeskBtn) modeDeskBtn.classList.toggle("active", !isUpkeep);
   if (modeUpkeepBtn) modeUpkeepBtn.classList.toggle("active", isUpkeep);
   if (controlTableSize) controlTableSize.classList.toggle("is-hidden", isUpkeep);
-  if (controlFitToHorizon) controlFitToHorizon.classList.toggle("is-hidden", isUpkeep);
+  if (controlFitToHorizon) controlFitToHorizon.classList.remove("is-hidden");
+  const fitHint = document.getElementById("fitToHorizonHint");
+  if (fitHint) {
+    fitHint.textContent = isUpkeep
+      ? "Allow curios exceeding the horizon by up to 20% of their study time to finish and be counted."
+      : "Size the queue so it drains completely within the horizon instead of blindly filling every cell.";
+  }
   if (headerStatusDesc) {
     headerStatusDesc.textContent = isUpkeep
       ? "Continuous Upkeep & Study Report"
@@ -436,6 +442,8 @@ if (tabSelectedBtn) tabSelectedBtn.addEventListener("click", () => setCurioTab("
 
 let horizonSecondsForList = DEFAULT_CONFIG.horizonDays * 86400;
 let speedForList = 1;
+let fitToHorizonForList = DEFAULT_CONFIG.fitToHorizon;
+let modeForList = DEFAULT_CONFIG.mode;
 
 function matchesTerm(name, term) {
   return !term || name.toLowerCase().includes(term);
@@ -463,7 +471,9 @@ function currentFilteredCurios() {
 }
 
 function isOverHorizon(c) {
-  return c.studySeconds / speedForList > horizonSecondsForList;
+  const allowOverrun = modeForList === "upkeep" && !!fitToHorizonForList;
+  const factor = allowOverrun ? 0.8 : 1;
+  return (c.studySeconds / speedForList) * factor > horizonSecondsForList + 1e-6;
 }
 
 function curioSubline(c) {
@@ -944,9 +954,15 @@ function recompute() {
   };
 
   // The list marks items that cannot fit the horizon; keep it in sync.
-  const horizonChanged = horizonSecondsForList !== config.horizonSeconds || speedForList !== ui.speedMult;
+  const horizonChanged =
+    horizonSecondsForList !== config.horizonSeconds ||
+    speedForList !== ui.speedMult ||
+    fitToHorizonForList !== config.fitToHorizon ||
+    modeForList !== config.mode;
   horizonSecondsForList = config.horizonSeconds;
   speedForList = ui.speedMult;
+  fitToHorizonForList = config.fitToHorizon;
+  modeForList = config.mode;
 
   const candidates = CATALOG
     .filter(c => selected.has(c.name))
@@ -1150,6 +1166,8 @@ function renderStats(report, config) {
         `Queue sized to ${report.fit.cellBudget}/${report.table.totalCells} cells — ` +
         `drains in ${fmtNum(s.makespan / 86400)}d of ${fmtNum(days)}d.`);
     }
+  } else if (config.fitToHorizon) {
+    html += note("Fit to horizon enabled: curios finishing within 20% of their study time past the deadline are included.");
   }
 
   // Which constraint actually binds? Determined from the run, not assumed.
@@ -1355,6 +1373,8 @@ function applyImportedConfig(raw) {
   syncSliderLabels();
   horizonSecondsForList = parseFloat(controls.horizonDays.value) * 86400;
   speedForList = parseFloat(controls.speedMult.value);
+  fitToHorizonForList = controls.fitToHorizon.checked;
+  modeForList = currentMode;
   renderCurioList();
   scheduleSave();
   scheduleRecompute();
@@ -1505,5 +1525,7 @@ loadState();
 syncSliderLabels();
 horizonSecondsForList = parseFloat(controls.horizonDays.value) * 86400;
 speedForList = parseFloat(controls.speedMult.value);
+fitToHorizonForList = controls.fitToHorizon.checked;
+modeForList = currentMode;
 renderCurioList();
 recompute();

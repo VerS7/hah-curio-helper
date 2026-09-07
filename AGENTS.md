@@ -59,19 +59,22 @@ The planner operates in one of two distinct modes:
 
 #### 2. Upkeep Mode (`mode: "upkeep"`)
 - **Continuous Study Rotation**: Models active players who continuously replenish their Study Report ($4 \times 4$) from an unconstrained external inventory (e.g. storage chests).
-- **No Desk Limit**: Study Desk size and "Fit to horizon" queue budgeting are bypassed and hidden in the UI.
+- **No Desk Limit**: Study Desk size is bypassed and hidden in the UI.
+- **Fit to Horizon (20% Study Time Overrun)**:
+  - When enabled (`fitToHorizon: true`), curios that start before the horizon and finish within 20% of their study time past the deadline ($t_{\text{finish}} - \text{horizon} \le 0.2 \times c.\text{studySeconds} \iff t_{\text{now}} + 0.8 \times c.\text{studySeconds} \le \text{horizon}$) are placed, completed, and counted toward LP and XP.
+  - When disabled (`fitToHorizon: false`), a strict horizon cutoff is enforced ($c.\text{studySeconds} \le \text{horizon} - \text{currentTime}$).
 - **Unconstrained Supply Simulation**: Each candidate curio is given an initial supply equal to $\text{maxUsefulCopies}(c)$. The simulation runs continuous refills whenever slots open.
 - **Primary Output**: The total curiosity consumption / production requirements across the entire horizon ($\times N$ total copies studied, total LP, total XP per type).
 
 ### 2.4. Refill Logic (Event Loop)
 When a curio finishes in the Study Report:
 1. **Same-type refill first**: Try to take another copy of the completed curio (from the desk queue or upkeep supply). Its type just vacated the Study Report, and its dimensions and weight are guaranteed to fit.
-2. **Priority fallback**: If no copies of that type remain or it cannot finish before the horizon deadline ($t + c.\text{studySeconds} > \text{horizon}$), scan candidate pool by user priority for the highest-ranked curio that:
+2. **Priority fallback**: If no copies of that type remain or it cannot finish before the horizon deadline, scan candidate pool by user priority for the highest-ranked curio that:
    - Fits within available Study Report grid cells.
    - Fits within remaining Attention (weight).
    - Is not already active in the Study Report (uniqueness constraint).
-   - Can finish before the remaining horizon deadline:
-     $$c.\text{studySeconds} \le \text{horizon} - \text{currentTime}$$
+   - Can finish within allowed time limits:
+     $$c.\text{studySeconds} \le \text{horizon} - \text{currentTime} \quad (\text{or } c.\text{studySeconds} \times 0.8 \le \text{horizon} - \text{currentTime} \text{ if Upkeep + Fit to Horizon})$$
 3. **Repeat greedy placement**: Continue refilling until no more curios fit. (Freeing a single heavy curio can open room for multiple lighter curios).
 
 ### 2.5. Min and Max Quantity Constraints
@@ -184,7 +187,7 @@ When modifying this repository, adhere to these strict invariants:
 
 7. **Operating Mode Compatibility**:
    - `Planner` must support both `mode: "desk"` (default) and `mode: "upkeep"`.
-   - In Upkeep mode, the UI must hide desk size and "Fit to horizon" controls without breaking state synchronization.
+   - In Upkeep mode, the UI hides desk size controls while "Fit to horizon" controls remain visible and active to toggle the 20% study time overrun tolerance.
    - `report()` returns mode-specific structures: `report.table` in Desk mode, and `report.upkeep` in Upkeep mode, with shared `buffer` and `stats` fields (including `LP per day` and `LP per hour`).
 
 ---
@@ -206,8 +209,11 @@ Because `planner.js` uses `module.exports` conditionally, the core engine can be
 # Desk Mode (3 days baseline)
 node -e "const vm = require('vm'); const fs = require('fs'); vm.runInThisContext(fs.readFileSync('./data.js', 'utf8')); const { Planner } = require('./planner.js'); const p = new Planner(CURIOSITIES_DATA, { mode: 'desk', tableW: 12, tableH: 12, bufferW: 4, bufferH: 4, bufferMaxWeight: 150, horizonSeconds: 3 * 86400, priorities: [{ metric: 'lp_per_weight_hour', direction: 'max' }], lpMultiplier: 1, speedMultiplier: 1, fitToHorizon: false }); console.log(p.run().stats);"
 
-# Upkeep Mode (3 days baseline)
+# Upkeep Mode (3 days baseline, strict horizon cutoff)
 node -e "const vm = require('vm'); const fs = require('fs'); vm.runInThisContext(fs.readFileSync('./data.js', 'utf8')); const { Planner } = require('./planner.js'); const p = new Planner(CURIOSITIES_DATA, { mode: 'upkeep', tableW: 12, tableH: 12, bufferW: 4, bufferH: 4, bufferMaxWeight: 150, horizonSeconds: 3 * 86400, priorities: [{ metric: 'lp_per_weight_hour', direction: 'max' }], lpMultiplier: 1, speedMultiplier: 1, fitToHorizon: false }); console.log(p.run().stats);"
+
+# Upkeep Mode (3 days baseline, with Fit to Horizon 20% study time tolerance)
+node -e "const vm = require('vm'); const fs = require('fs'); vm.runInThisContext(fs.readFileSync('./data.js', 'utf8')); const { Planner } = require('./planner.js'); const p = new Planner(CURIOSITIES_DATA, { mode: 'upkeep', tableW: 12, tableH: 12, bufferW: 4, bufferH: 4, bufferMaxWeight: 150, horizonSeconds: 3 * 86400, priorities: [{ metric: 'lp_per_weight_hour', direction: 'max' }], lpMultiplier: 1, speedMultiplier: 1, fitToHorizon: true }); console.log(p.run().stats);"
 
 # Desk Mode with minCopies and maxCopies constraint
 node -e "const vm = require('vm'); const fs = require('fs'); vm.runInThisContext(fs.readFileSync('./data.js', 'utf8')); const { Planner } = require('./planner.js'); const data = CURIOSITIES_DATA.map(c => c.name === 'Cone Cow' ? { ...c, minCopies: 5, maxCopies: 5 } : c); const p = new Planner(data, { mode: 'desk', tableW: 12, tableH: 12, bufferW: 4, bufferH: 4, bufferMaxWeight: 150, horizonSeconds: 3 * 86400, priorities: [{ metric: 'lp_per_weight_hour', direction: 'max' }], lpMultiplier: 1, speedMultiplier: 1, fitToHorizon: false }); console.log('Cone Cow desk allocation:', p.run().table.groups.find(g => g.name === 'Cone Cow'));"
@@ -220,7 +226,8 @@ Validate simulation integrity against known mathematical baselines:
 |---|---|---|---|---|
 | **Desk**: Table 12×12, Buffer 4×4, Max Weight 150, Default Priorities | **3 days** | **144** | **0** | **4,549,500** |
 | **Desk**: Table 12×12, Buffer 4×4, Max Weight 150, Default Priorities | **30 days** | **144** | **0** | **39,361,000** |
-| **Upkeep**: Buffer 4×4, Max Weight 150, Default Priorities | **3 days** | **524** | **N/A (unconstrained)** | **5,797,750** |
+| **Upkeep**: Buffer 4×4, Max Weight 150, Fit to Horizon: false, Default Priorities | **3 days** | **524** | **N/A (unconstrained)** | **5,797,750** |
+| **Upkeep**: Buffer 4×4, Max Weight 150, Fit to Horizon: true (20% overrun), Default Priorities | **3 days** | **487** | **N/A (unconstrained)** | **6,197,675** |
 
 - **Horizon Scaling**: Increasing horizon from 3d to 30d should increase LP gained by ~8.7× due to higher-tier curio chains fitting within the window.
 - **Uniqueness Check**: In any simulation snapshot or buffer layout, no curiosity name may appear more than once in the buffer.

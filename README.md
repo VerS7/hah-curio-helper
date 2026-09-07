@@ -133,7 +133,9 @@ Designed for active players who continuously replenish their Study Report from l
 - **Study Desk Size**: Configurable from $5 \times 5$ (25 cells) up to $12 \times 12$ (144 cells).
 - **Attention (Mental Weight)**: Slider ranging from 10 to 1,500 Attention.
 - **Planning Horizon**: Duration from 0.5 days (12 hours) to 30 days.
-- **Fit to Horizon**: Automatically sizes the Study Desk queue to drain completely before the deadline.
+- **Fit to Horizon**:
+  - *Study Desk Mode*: Automatically sizes the Study Desk queue to drain completely before the deadline.
+  - *Upkeep Mode*: Permits curiosities that start before the deadline and finish within 20% of their study time past the horizon to be studied and counted. When unchecked, a strict horizon deadline cutoff is applied.
 - **LP Multiplier & Study Speed Multiplier**: Global scaling factors (0.1x to 10.0x) applied in the derived layer *before sorting*, ensuring optimal item selection under custom realm bonuses, credos, or gear.
 - **Cell Size**: Adjusts visual tile rendering size (20px to 48px).
 
@@ -268,7 +270,11 @@ node -e "const vm = require('vm'); const fs = require('fs'); vm.runInThisContext
 
 #### Upkeep Mode (3 Days Horizon Baseline)
 ```powershell
+# Strict cutoff (Fit to Horizon unchecked)
 node -e "const vm = require('vm'); const fs = require('fs'); vm.runInThisContext(fs.readFileSync('./data.js', 'utf8')); const { Planner } = require('./planner.js'); const p = new Planner(CURIOSITIES_DATA, { mode: 'upkeep', tableW: 12, tableH: 12, bufferW: 4, bufferH: 4, bufferMaxWeight: 150, horizonSeconds: 3 * 86400, priorities: [{ metric: 'lp_per_weight_hour', direction: 'max' }], lpMultiplier: 1, speedMultiplier: 1, fitToHorizon: false }); console.log(p.run().stats);"
+
+# With 20% study time overrun tolerance (Fit to Horizon checked)
+node -e "const vm = require('vm'); const fs = require('fs'); vm.runInThisContext(fs.readFileSync('./data.js', 'utf8')); const { Planner } = require('./planner.js'); const p = new Planner(CURIOSITIES_DATA, { mode: 'upkeep', tableW: 12, tableH: 12, bufferW: 4, bufferH: 4, bufferMaxWeight: 150, horizonSeconds: 3 * 86400, priorities: [{ metric: 'lp_per_weight_hour', direction: 'max' }], lpMultiplier: 1, speedMultiplier: 1, fitToHorizon: true }); console.log(p.run().stats);"
 ```
 
 #### Min and Max Constraints Verification
@@ -284,7 +290,8 @@ Standard benchmark results for regression testing:
 |---|---|---|---|---|
 | **Desk**: Table 12x12, Buffer 4x4, Attention 150, Default Priorities | **3 days** | **144** | **0** | **4,549,500** |
 | **Desk**: Table 12x12, Buffer 4x4, Attention 150, Default Priorities | **30 days** | **144** | **0** | **39,361,000** |
-| **Upkeep**: Buffer 4x4, Attention 150, Default Priorities | **3 days** | **524** | **N/A (unconstrained)** | **5,797,750** |
+| **Upkeep**: Buffer 4x4, Attention 150, Fit to Horizon: false, Default Priorities | **3 days** | **524** | **N/A (unconstrained)** | **5,797,750** |
+| **Upkeep**: Buffer 4x4, Attention 150, Fit to Horizon: true (20% overrun), Default Priorities | **3 days** | **487** | **N/A (unconstrained)** | **6,197,675** |
 
 ### Catalog Data Regeneration
 If `tools/data/curiosities.json` is updated with newly discovered curiosities or rebalanced game stats:
