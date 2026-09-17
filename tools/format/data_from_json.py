@@ -22,12 +22,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "-i",
     required=False,
-    default=path.join(path.dirname(__file__), "data/curiosities.json"),
+    default=path.join(path.dirname(__file__), "curiosities.json"),
 )
 parser.add_argument(
     "-o",
     required=False,
-    default=path.join(path.dirname(__file__), "../data.js"),
+    default=path.join(path.dirname(__file__), "data.js"),
 )
 
 args = parser.parse_args()
