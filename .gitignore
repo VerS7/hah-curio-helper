@@ -1,0 +1,5 @@
+# External tools
+pandoc.exe
+
+# Temp files
+__pycache__
