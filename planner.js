@@ -96,8 +96,12 @@ function getStudyGroup(curioOrName) {
     if (curioOrName.studyGroup) return curioOrName.studyGroup;
     return getStudyGroup(curioOrName.name);
   }
-  const g = parseGem(curioOrName);
-  return g ? `gem:${g.family}` : curioOrName;
+  const name = String(curioOrName).trim();
+  const g = parseGem(name);
+  if (g) return `gem:${g.family}`;
+  if (/^pickled brain(\s*\(.*\))?$/i.test(name)) return "group:pickled_brain";
+  if (/^bug collection(\s*\(.*\))?$/i.test(name)) return "group:bug_collection";
+  return name;
 }
 
 // ---------------------------------------------------------------- //
@@ -308,8 +312,7 @@ class Planner {
         effectiveMin = Math.max(0, Math.min(Math.floor(Number(c.minCopies)), effectiveMax));
       }
 
-      const g = parseGem(c.name);
-      const studyGroup = g ? `gem:${g.family}` : c.name;
+      const studyGroup = getStudyGroup(c.name);
 
       return {
         name: c.name,
@@ -370,10 +373,29 @@ class Planner {
     const table = new Container(tableW, tableH, Infinity, true);
     const limit = Math.min(cellBudget, tableW * tableH);
     const counts = new Map();
+    const placedGroupVariant = new Map(); // group -> curio.name
+
+    const canPlaceOnTable = (c) => {
+      const group = c.studyGroup || getStudyGroup(c.name);
+      if (group && group !== c.name) {
+        if (placedGroupVariant.has(group) && placedGroupVariant.get(group) !== c.name) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const recordPlacedOnTable = (c) => {
+      const group = c.studyGroup || getStudyGroup(c.name);
+      if (group && group !== c.name) {
+        placedGroupVariant.set(group, c.name);
+      }
+    };
 
     // Phase 1: Mandatory minimum counts
     for (const c of this.sortedPool) {
       if (table.usedCells >= limit) break;
+      if (!canPlaceOnTable(c)) continue;
       const targetMin = c.effectiveMin;
       let placed = counts.get(c.name) || 0;
       while (placed < targetMin) {
@@ -382,11 +404,13 @@ class Planner {
         placed++;
         counts.set(c.name, placed);
       }
+      if (placed > 0) recordPlacedOnTable(c);
     }
 
     // Phase 2: Greedy fill up to effectiveMax in priority order
     for (const c of this.sortedPool) {
       if (table.usedCells >= limit) break;
+      if (!canPlaceOnTable(c)) continue;
       const cap = c.effectiveMax;
       let placed = counts.get(c.name) || 0;
       while (placed < cap) {
@@ -395,6 +419,7 @@ class Planner {
         placed++;
         counts.set(c.name, placed);
       }
+      if (placed > 0) recordPlacedOnTable(c);
     }
     return { table, counts, cellsUsed: table.usedCells };
   }
