@@ -117,7 +117,6 @@ const minQuantities = new Map(); // name -> min
 const maxQuantities = new Map(); // name -> max
 let currentCurioTab = "all"; // "all" | "selected"
 let currentCenterTab = "stats"; // "stats" | "simulate"
-let simulateEnabled = false;
 
 function getQuality(name) {
   const q = quality.get(name);
@@ -316,7 +315,6 @@ function saveState() {
         searchTerm,
         curioTab: currentCurioTab,
         centerTab: currentCenterTab,
-        simulateEnabled: simulateEnabled,
       },
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -416,9 +414,6 @@ function loadState() {
     }
     if (data.ui.centerTab === "stats" || data.ui.centerTab === "simulate") {
       currentCenterTab = data.ui.centerTab;
-    }
-    if (typeof data.ui.simulateEnabled === "boolean") {
-      simulateEnabled = data.ui.simulateEnabled;
     }
   }
   syncCurioTabsUI();
@@ -921,7 +916,6 @@ document.getElementById("btnReset").addEventListener("click", () => {
   searchInput.value = "";
   currentCurioTab = "all";
   currentCenterTab = "stats";
-  simulateEnabled = false;
   stopSimPlayback();
   syncCurioTabsUI();
   syncCenterTabsUI();
@@ -1001,7 +995,7 @@ function recompute() {
   }
 
   const planner = new Planner(candidates, config);
-  const report = planner.run({ recordTimeline: simulateEnabled });
+  const report = planner.run({ recordTimeline: currentCenterTab === "simulate" });
 
   const groups = report.mode === "upkeep" ? report.upkeep.groups : report.table.groups;
   renderQueue(groups, config, report);
@@ -1232,8 +1226,6 @@ const tabCenterStats = document.getElementById("tabCenterStats");
 const tabCenterSimulate = document.getElementById("tabCenterSimulate");
 const tabContentStats = document.getElementById("tabContentStats");
 const tabContentSimulate = document.getElementById("tabContentSimulate");
-const enableSimulateCheck = document.getElementById("enableSimulate");
-const simulateActiveWrap = document.getElementById("simulateActiveWrap");
 
 const simTimeDisplay = document.getElementById("simTimeDisplay");
 const simTimeSlider = document.getElementById("simTimeSlider");
@@ -1269,17 +1261,25 @@ function syncCenterTabsUI() {
   if (tabCenterSimulate) tabCenterSimulate.classList.toggle("active", isSim);
   if (tabContentStats) tabContentStats.classList.toggle("is-hidden", isSim);
   if (tabContentSimulate) tabContentSimulate.classList.toggle("is-hidden", !isSim);
-
-  if (enableSimulateCheck) enableSimulateCheck.checked = simulateEnabled;
-  if (simulateActiveWrap) simulateActiveWrap.classList.toggle("is-hidden", !simulateEnabled);
 }
 
 function setCenterTab(tab) {
   const next = tab === "simulate" ? "simulate" : "stats";
   if (currentCenterTab === next) return;
+  const prev = currentCenterTab;
   currentCenterTab = next;
+  if (prev === "simulate") {
+    stopSimPlayback();
+  }
   syncCenterTabsUI();
   scheduleSave();
+  if (currentCenterTab === "simulate") {
+    if (!simReportCache || !simReportCache.timeline) {
+      recompute();
+    } else {
+      updateSimulationReport(simReportCache, simConfigCache);
+    }
+  }
 }
 
 function fmtDetailedDuration(seconds) {
@@ -1299,7 +1299,7 @@ function updateSimulationReport(report, config) {
   simReportCache = report;
   simConfigCache = config;
 
-  if (!report || !report.timeline || !simulateEnabled) {
+  if (!report || !report.timeline) {
     stopSimPlayback();
     if (simTimeSlider) {
       simTimeSlider.min = "0";
@@ -1610,15 +1610,6 @@ function simStepNext() {
 // Wire simulation event listeners
 if (tabCenterStats) tabCenterStats.addEventListener("click", () => setCenterTab("stats"));
 if (tabCenterSimulate) tabCenterSimulate.addEventListener("click", () => setCenterTab("simulate"));
-if (enableSimulateCheck) {
-  enableSimulateCheck.addEventListener("change", () => {
-    simulateEnabled = enableSimulateCheck.checked;
-    if (!simulateEnabled) stopSimPlayback();
-    syncCenterTabsUI();
-    scheduleSave();
-    scheduleRecompute();
-  });
-}
 if (simTimeSlider) {
   simTimeSlider.addEventListener("input", () => {
     stopSimPlayback();

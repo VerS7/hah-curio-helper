@@ -203,7 +203,7 @@ Save and share complete setups (selected curios, custom qualities, min/max limit
 ### Interactive Simulation Timeline ("Simulate" Tab)
 
 Located below the Upkeep & Study Report grids in the center panel, the **Simulate** tab provides an interactive time-travel player:
-- **Opt-In Toggle**: Disabled by default (`Enable simulation` checkbox) to avoid unnecessary processing overhead during rapid setup adjustments.
+- **Instant Tab Activation**: Switching to the **Simulate** tab automatically activates the timeline simulation without extra toggles.
 - **Time Scrubber**: Smooth slider navigating from $t=0$ to the horizon or makespan. Displays timestamp (`0d 14h 32m 00s / 3d 00h 00m`) and completion percentage.
 - **Playback Controls**: Play/Pause (`▶` / `❚❚`), step to previous completion (`◀ Prev`), step to next completion (`Next ▶`), jump to start/end, and playback speed selector (`1h/s`, `6h/s`, `1d/s`, `3d/s`).
 - **Real-Time State at Time $t$**:

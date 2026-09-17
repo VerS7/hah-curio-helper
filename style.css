@@ -645,20 +645,6 @@ footer{
 }
 
 /* ---- Simulate tab styles ---- */
-.simulate-optin {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  margin-bottom: 12px;
-}
-
-.simulate-optin label.check {
-  font-weight: 600;
-  font-size: var(--fs);
-  color: var(--accent);
-}
-
 .sim-scrubber-card {
   background: var(--panel-2);
   border: 1px solid var(--border);
