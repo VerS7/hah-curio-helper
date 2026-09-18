@@ -14,7 +14,7 @@ Curiosity Planner is a zero-dependency, client-side web application designed to 
     - [Running via Local HTTP Server (Optional)](#running-via-local-http-server-optional)
   - [Core Mechanics and Domain Rules](#core-mechanics-and-domain-rules)
     - [Workstation vs. Storage Queue](#workstation-vs-storage-queue)
-    - [Exclusivity and Gemstone Families](#exclusivity-and-gemstone-families)
+    - [Exclusivity, Gemstones, and Multi-Variant Groups](#exclusivity-gemstones-and-multi-variant-groups)
     - [Refill Event Loop](#refill-event-loop)
   - [Operational Modes](#operational-modes)
     - [1. Study Desk Mode](#1-study-desk-mode)
@@ -26,6 +26,7 @@ Curiosity Planner is a zero-dependency, client-side web application designed to 
     - [Fine-Grained Constraints: Min, Max, and Quality](#fine-grained-constraints-min-max-and-quality)
     - [Gemstone Bulk Management](#gemstone-bulk-management)
     - [Configuration Import and Export](#configuration-import-and-export)
+    - [Interactive Simulation Timeline ("Simulate" Tab)](#interactive-simulation-timeline-simulate-tab)
   - [Statistics and Bottleneck Diagnostics](#statistics-and-bottleneck-diagnostics)
     - [Diagnostic Engine](#diagnostic-engine)
   - [Mathematical Formulas](#mathematical-formulas)
@@ -39,7 +40,7 @@ Curiosity Planner is a zero-dependency, client-side web application designed to 
       - [Upkeep Mode (3 Days Horizon Baseline)](#upkeep-mode-3-days-horizon-baseline)
       - [Min and Max Constraints Verification](#min-and-max-constraints-verification)
     - [Benchmark Baselines](#benchmark-baselines)
-    - [Catalog Data Regeneration](#catalog-data-regeneration)
+    - [Catalog Data Regeneration and Wiki Scraping](#catalog-data-regeneration-and-wiki-scraping)
   - [Disclaimer](#disclaimer)
 
 ---
@@ -87,10 +88,14 @@ Then open `http://localhost:8000` in your browser.
 2. **Independent Parallel Progress**: All items placed in the Study Report progress concurrently. An item with duration $t$ finishes exactly $t$ seconds after being placed, independent of other active curios.
 3. **Resource Freeing**: Upon completion, a curio awards its LP, expends character Experience Points (XP), and vacates its grid cells and Attention allocation immediately.
 
-### Exclusivity and Gemstone Families
+### Exclusivity, Gemstones, and Multi-Variant Groups
 
 - **No Duplicates in Study Report**: Only one copy of any given curiosity type (e.g. `Gold Egg` or `Cone Cow`) may reside in the Study Report at any instant. Duplicates are permitted on the Study Desk queue.
-- **Gemstone Family Exclusivity**: 540 cut gemstones exist in the catalog across 15 families (such as Jade, Ruby, Sapphire, Sugar Diamond, Diamond). All 36 variants (6 sizes $\times$ 6 cuts) of a family share a single study slot. Two gems from the same family (e.g. `Tiny Rough Jade` and `Grand Brilliant Jade`) cannot be studied at the same time. Gems from different families (e.g. Jade and Ruby) can be studied concurrently.
+- **Gemstone Family Exclusivity**: 540 cut gemstones exist in the catalog across 15 families (such as Jade, Ruby, Sapphire, Sugar Diamond, Diamond). All 36 variants (6 sizes $\times$ 6 cuts) of a family share a single study slot (`gem:<family>`). Two gems from the same family (e.g. `Tiny Rough Jade` and `Grand Brilliant Jade`) cannot be studied concurrently. Gems from different families (e.g. Jade and Ruby) can be studied simultaneously.
+- **Multi-Variant Curiosities Exclusivity**:
+  - **Pickled Brain**: 4 sizes exist in-game (`Pickled Brain (Tiny)`, `Pickled Brain (Small)`, `Pickled Brain` [medium], `Pickled Brain (Big)`). All share the study group `group:pickled_brain`. Only one Pickled Brain variant can be studied at a time.
+  - **Bug Collection**: 5 stages exist in-game (`Bug Collection (2/6)` through `Bug Collection (6/6)`). All share the study group `group:bug_collection`. Only one Bug Collection stage can be studied at a time.
+- **Desk Queue Variant Exclusivity**: When allocating items to the physical Study Desk in Desk Mode, variants of the same study group cannot be mixed on the desk. Selecting one variant (e.g. `Pickled Brain (Big)`) reserves the desk allocation for that group, preventing other variants of that group from taking up desk space.
 
 ### Refill Event Loop
 
@@ -170,7 +175,7 @@ Two-tier customizable priority comparator (Priority 1 + tie-breaking Priority 2)
 ### Curiosity Catalog, Search, and Tabs
 
 - **Dual Tabs**:
-  - **All**: Browse all 840 curiosities embedded in the database.
+  - **All**: Browse all 847 curiosities embedded in the database.
   - **Selected**: Filter down exclusively to active, chosen curiosities.
 - **Real-Time Search**: Instant filtering by item name or gemstone family.
 - **Bulk Action Buttons**: Select/Deselect Visible, Select All, Clear All.
@@ -269,13 +274,24 @@ hah-curio-helper/
 ├── style.css             # Dark theme styling, CSS Grid/Flexbox layouts, CSS variables
 ├── planner.js            # Core simulation engine (GridPacker, Container, MinHeap, Planner)
 ├── app.js                # State management, localStorage persistence, DOM renderer
-├── data.js               # Embedded catalog containing all 840 curiosities
+├── data.js               # Embedded catalog containing all 847 curiosities
 ├── AGENTS.md             # Operational architecture and domain manual for AI agents
 ├── README.md             # End-user and technical documentation
 └── tools/
-    ├── data_from_json.py # Python utility to compile raw JSON into data.js
-    └── data/
-        └── curiosities.json # Raw scraped curiosity dataset
+    ├── dump/             # Asynchronous wiki crawler and parsing pipeline
+    │   ├── main.py       # Pipeline CLI runner
+    │   ├── crawler.py    # Async scraper, gem resolver & patch logic
+    │   ├── models.py     # Strongly typed dataclasses & JSON serializers
+    │   ├── pipeline.py   # Multi-stage execution pipeline manager
+    │   ├── math_parser.py# MathML to LaTeX to text formula parser
+    │   ├── constants.py  # Attributes, gemstone families, cuts, HTTP headers
+    │   ├── requirements.txt # Python dependencies
+    │   ├── pandoc.exe    # Bundled Pandoc executable for Windows
+    │   └── README.md     # Scraper documentation
+    └── format/           # Data formatting and generation
+        ├── curiosities.json # Master curiosity dataset (847 items with full metadata)
+        ├── data_from_json.py # Python script compiling curiosities.json into data.js
+        └── README.md     # Formatter documentation
 ```
 
 ---
@@ -315,11 +331,23 @@ Standard benchmark results for regression testing:
 | **Upkeep**: Buffer 4x4, Attention 150, Fit to Horizon: false, Default Priorities | **3 days** | **524** | **N/A (unconstrained)** | **5,797,750** |
 | **Upkeep**: Buffer 4x4, Attention 150, Fit to Horizon: true (20% overrun), Default Priorities | **3 days** | **487** | **N/A (unconstrained)** | **6,197,675** |
 
-### Catalog Data Regeneration
-If `tools/data/curiosities.json` is updated with newly discovered curiosities or rebalanced game stats:
+### Catalog Data Regeneration and Wiki Scraping
 
+#### Compiling `data.js` from Master JSON:
+When `tools/format/curiosities.json` is updated:
 ```powershell
-python tools/data_from_json.py -i tools/data/curiosities.json -o data.js
+python tools/format/data_from_json.py -i tools/format/curiosities.json -o data.js
+```
+Confirm `data.js` preserves the `const CURIOSITIES_DATA = [...]` declaration (847 items).
+
+#### Running the Wiki Scraper Pipeline:
+To crawl Ring of Brodgar wiki or re-apply patches:
+```powershell
+# Re-apply controversial cases / patches to existing JSON
+python tools/dump/main.py -p read,cases,write -i tools/format/curiosities.json -o tools/format/curiosities.json
+
+# Full re-scrape from wiki
+python tools/dump/main.py -p shallow,deep,gemstones,cases,write -o tools/format/curiosities.json --concurrency 10
 ```
 
 ---

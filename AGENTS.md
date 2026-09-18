@@ -11,12 +11,12 @@ Curiosity Planner is a zero-dependency, client-side web application designed for
 ### Core Stack & Architecture Principles
 - **Pure Vanilla Web Technologies**: HTML5, Vanilla JavaScript (ES6+), modern CSS3.
 - **Zero Runtime Dependencies**: No npm packages, no bundlers, no build steps. The app runs immediately when opening `index.html` in any browser or serving statically.
-- **Offline-First**: All 840 curiosity definitions are embedded in `data.js`. Curio images load from `ringofbrodgar.com` with graceful offline fallback to SVG placeholders.
+- **Offline-First**: All 847 curiosity definitions are embedded in `data.js`. Curio images load from `ringofbrodgar.com` with graceful offline fallback to SVG placeholders.
 - **Clean Layered Separation**:
   - `planner.js`: Pure mathematical domain engine (discrete-event simulation, grid packing, min-heap, priority sorting). CommonJS-compatible (`module.exports`) for headless Node.js testing.
   - `app.js`: Application controller, reactive state management, debounced `localStorage` persistence, DOM rendering.
   - `index.html` & `style.css`: Semantic markup, flat dark UI theme, responsive CSS Grid/Flexbox layouts.
-  - `data.js`: Static database of 840 curiosities generated via `tools/data_from_json.py`.
+  - `data.js`: Static database of 847 curiosities generated via `tools/format/data_from_json.py`.
 
 ---
 
@@ -34,10 +34,12 @@ Understanding game mechanics is required to prevent invalid optimizations or bro
 ### 2.2. The Study Report (Buffer) — Workstation
 - **Fixed Size (4 × 4 cells)**: In Haven & Hearth, the player's study inventory (Study Report) is strictly $4 \times 4$ cells (16 cells total). This is immutable and not configurable.
 - **Attention Cap (Mental Weight)**: Total active curiosity weight cannot exceed the Attention cap (`bufferMaxWeight`).
-- **Strictly Unique Types (No Duplicates in Study Report)**:
-  - A character can only study **one copy of any given curiosity type at a time**.
+- **Study Exclusivity & Study Groups (No Concurrent Duplicates)**:
+  - A character can only study **one copy of any given curiosity type or study group at a time**.
   - Two copies of `Gold Egg` or two copies of `Cone Cow` **cannot** reside in the Study Report simultaneously.
-  - **Gemstones**: All sizes and cuts of the same gem family share the same study slot. Two curiosities of the same gem family (e.g. `Tiny Rough Jade` and `Grand Brilliant Jade`) **cannot** reside in the Study Report simultaneously.
+  - **Gemstones**: All 36 variants (6 sizes &times; 6 cuts) of the same gem family share the study group `gem:<family>`. Two curiosities of the same gem family (e.g. `Tiny Rough Jade` and `Grand Brilliant Jade`) **cannot** reside in the Study Report simultaneously.
+  - **Pickled Brain Variants**: All 4 sizes (`Tiny`, `Small`, `Medium` [default], `Big`) share `group:pickled_brain`. Only one Pickled Brain variant can be studied at a time.
+  - **Bug Collection Variants**: All 5 stages (`2/6` through `6/6`) share `group:bug_collection`. Only one Bug Collection stage can be studied at a time.
 - **Parallel Independent Study**:
   - All items in the Study Report progress their timers concurrently and independently.
   - An item with duration $t$ completes exactly $t$ seconds after entering the Study Report.
@@ -52,6 +54,7 @@ The planner operates in one of two distinct modes:
 #### 1. Study Desk Mode (`mode: "desk"`)
 - **Physical Desk Inventory**: Models loading curiosities into an in-game Study Desk container ($N \times N$ cells, configurable from $5 \times 5$ to $12 \times 12$).
 - **Finite Queue**: The study desk is limited strictly by grid cells (no weight cap). It serves as a finite storage queue that drains into the Study Report over time.
+- **Desk Variant Mutual Exclusivity**: When allocating the desk queue (`buildTable`), variants belonging to the same study group (`group:pickled_brain`, `group:bug_collection`, `gem:<family>`) cannot be mixed on the desk. Once a variant of a group is chosen (e.g., `Pickled Brain (Big)`), other variants of that group are rejected (`canPlaceOnTable` / `recordPlacedOnTable`).
 - **Serialization & Queue Cap**: Multiple copies of the same curio type are studied serially. Each type is capped to:
   $$\text{maxCopies}(c) = \max\left(1, \left\lfloor \frac{\text{horizon}}{c.\text{studySeconds}} \right\rfloor\right)$$
 - **Fit to Horizon**: When enabled, the engine performs a binary search over desk cell budgets to find the largest queue that drains completely before the deadline.
@@ -103,8 +106,10 @@ $$\text{LP}_{\text{effective}} = \text{LP}_{\text{base}} \times \sqrt{\frac{Q}{1
 - $Q160 \to 4.0\times$
 - Mental weight and study time are **intrinsic and unaffected by quality**.
 
-### 2.7. Gemstones Taxonomy (540 Variants)
-- 540 of the 840 curiosities in `data.js` are cut gemstones matching the pattern:
+### 2.7. Gemstones Taxonomy & Multi-Variant Curiosities
+
+#### Gemstone Taxonomy (540 Variants)
+- 540 of the 847 curiosities in `data.js` are cut gemstones matching the pattern:
   `"<Size> <Cut> <GemFamily>"`
 - **Sizes (6)**: `Tiny`, `Small`, `Fair`, `Large`, `Grand`, `Jotun`
 - **Cuts (6)**: `Rough`, `Smooth`, `Cabochon`, `Pear`, `Heart`, `Brilliant`
@@ -115,6 +120,16 @@ $$\text{LP}_{\text{effective}} = \text{LP}_{\text{base}} \times \sqrt{\frac{Q}{1
   const family = p.slice(2).join(" ");
   ```
 - **Study Exclusivity Rule**: Only one gemstone of a given family can be studied concurrently in the Study Report (Buffer). Different gem families (e.g. Jade and Ruby) can be studied concurrently.
+
+#### Multi-Variant Study Groups
+Specific curiosities have multiple in-game sizes or stages that share study exclusivity:
+- **Pickled Brain (`group:pickled_brain`)**: 4 size variants (`Pickled Brain (Tiny)`, `Pickled Brain (Small)`, `Pickled Brain` [medium], `Pickled Brain (Big)`). All share weight 15 and size 1&times;1, but scale in LP and duration.
+- **Bug Collection (`group:bug_collection`)**: 5 stage variants (`Bug Collection (2/6)` through `Bug Collection (6/6)`). All share weight 30 and size 2&times;1, but scale in LP and duration.
+- **Study Group Resolution (`getStudyGroup`)**:
+  - `gem:<family>` for gemstones.
+  - `group:pickled_brain` for regex `/^pickled brain(\s*\(.*\))?$/i`.
+  - `group:bug_collection` for regex `/^bug collection(\s*\(.*\))?$/i`.
+  - `curio.name` for standard curiosities.
 
 ### 2.8. Zero XP Cost Curios & Deterministic Sorting
 Four curios have `xpCost = 0`:
@@ -133,23 +148,41 @@ The statistics panel must evaluate and report which constraint binds the current
 - **Cell-Bound**: `bufferPeakCells >= totalCells` while `bufferPeakWeight < maxWeight`. (Study Report grid is full).
 - **Type-Bound**: Both Attention and cells have spare capacity, but Study Report idles because the study desk lacks distinct curio types to study in parallel.
 
+### 2.10. Interactive Simulation Timeline Engine
+The planner supports step-by-step state recording for time-travel inspection:
+- When invoked with `planner.run({ recordTimeline: true })`, the simulation records:
+  - Initial buffer placement snapshot at $t=0$.
+  - Completion event checkpoints: timestamp $t$, curio completed, LP gained, XP spent, cumulative studied counts, active buffer occupants with remaining durations, and instantaneous peak metrics.
+- In `app.js`, timeline computation is triggered on demand when switching to the center **Simulate** tab (`currentCenterTab === "simulate"`), leaving normal calculation overhead at sub-2ms when viewing the static **Stats** tab.
+- The UI provides interactive scrubbing, stepping to previous/next completions, and variable-speed playback.
+
 ---
 
 ## 3. Project Structure & Key Files
 
 ```text
 hah-curio-helper/
-├── index.html            # Main UI markup (3 panels: Settings, Grids/Stats, Curio Selection)
+├── index.html            # Main UI markup (3 panels: Settings, Grids/Stats/Simulate, Curio Selection)
 ├── style.css             # Dark theme stylesheet, CSS variables, responsive rules
 ├── planner.js            # Core simulation engine (exportable CommonJS / browser script)
 ├── app.js                # App state, event listeners, localStorage, DOM renderer
-├── data.js               # Embedded catalog: const CURIOSITIES_DATA = [...] (840 items)
-├── PLAN.md               # Historical roadmap and multi-stage execution plan
+├── data.js               # Embedded catalog: const CURIOSITIES_DATA = [...] (847 items)
 ├── README.md             # End-user documentation
 └── tools/
-    ├── data_from_json.py # Python script regenerating data.js from raw JSON
-    └── data/
-        └── curiosities.json # Raw scraped curiosity dataset
+    ├── dump/             # Wiki scraping and parsing pipeline
+    │   ├── main.py       # Pipeline CLI runner
+    │   ├── crawler.py    # Async scraper, gem resolver & controversial cases
+    │   ├── models.py     # Dataclasses & JSON serialization
+    │   ├── pipeline.py   # Stage manager
+    │   ├── math_parser.py# MathML to LaTeX to text parser
+    │   ├── constants.py  # Enums, softcap stats, gemstone definitions
+    │   ├── requirements.txt # Python dependencies
+    │   ├── pandoc.exe    # Bundled Pandoc binary for Windows
+    │   └── README.md     # Scraper documentation
+    └── format/           # Data formatting and generation
+        ├── curiosities.json # Master JSON dataset (847 items)
+        ├── data_from_json.py # Python script regenerating data.js from curiosities.json
+        └── README.md     # Formatter documentation
 ```
 
 ---
@@ -232,9 +265,21 @@ Validate simulation integrity against known mathematical baselines:
 - **Horizon Scaling**: Increasing horizon from 3d to 30d should increase LP gained by ~8.7× due to higher-tier curio chains fitting within the window.
 - **Uniqueness Check**: In any simulation snapshot or buffer layout, no curiosity name may appear more than once in the buffer.
 
-### 5.4. Data Regeneration
-If `tools/data/curiosities.json` is updated with new game items:
+### 5.4. Data Regeneration & Wiki Scraping
+
+#### Compiling `data.js` from Master JSON:
+Whenever `tools/format/curiosities.json` is updated:
 ```powershell
-python tools/data_from_json.py -i tools/data/curiosities.json -o data.js
+python tools/format/data_from_json.py -i tools/format/curiosities.json -o data.js
 ```
-Confirm `data.js` preserves the `const CURIOSITIES_DATA = [...]` declaration.
+Confirm `data.js` preserves the `const CURIOSITIES_DATA = [...]` declaration (847 items).
+
+#### Running the Wiki Scraping Pipeline:
+To re-process patches or re-scrape curiosity data from the Ring of Brodgar wiki:
+```powershell
+# Re-apply controversial cases / patches to existing JSON
+python tools/dump/main.py -p read,cases,write -i tools/format/curiosities.json -o tools/format/curiosities.json
+
+# Full re-scrape from wiki
+python tools/dump/main.py -p shallow,deep,gemstones,cases,write -o tools/format/curiosities.json --concurrency 10
+```
